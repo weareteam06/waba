@@ -1,0 +1,19 @@
+logging:
+  level:
+    com.whatsaas: DEBUG
+    org.springframework.security: INFO
+
+app:
+  security:
+    # Local Maven runs use this fallback. Override JWT_SECRET for shared or persistent environments.
+    secret: ${JWT_SECRET:local-development-jwt-secret-change-before-sharing}
+
+spring:
+  flyway:
+    # Set FLYWAY_ENABLED=true only when this environment should apply migrations.
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+    baseline-version: ${FLYWAY_BASELINE_VERSION:1}
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true

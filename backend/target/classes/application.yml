@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: wa-command-backend
+  profiles:
+    default: dev
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3308/wa_command?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:saibaba}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Use an externally provisioned schema by default. Opt into validate in controlled environments if desired.
+      ddl-auto: ${JPA_DDL_AUTO:none}
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    # Keep migration scripts in the app, but do not mutate an already provisioned schema at runtime by default.
+    enabled: ${FLYWAY_ENABLED:false}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m
+      cache-null-values: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:wa_app}
+    password: ${RABBITMQ_PASSWORD:123456}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        default-requeue-rejected: false
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  web:
+    allowed-origins: ${APP_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+  security:
+    issuer: ${JWT_ISSUER:wa-command}
+    secret: ${JWT_SECRET}
+    access-token-ttl: ${ACCESS_TOKEN_TTL:15m}
+    refresh-token-ttl: ${REFRESH_TOKEN_TTL:30d}
+  messaging:
+    exchange: ${WA_EXCHANGE:wa.commands}
+    message-routing-key: ${WA_MESSAGE_ROUTING_KEY:message.send}
+    message-queue: ${WA_MESSAGE_QUEUE:wa.message.send}
+    message-retry-routing-key: ${WA_MESSAGE_RETRY_ROUTING_KEY:message.send.retry}
+    message-retry-queue: ${WA_MESSAGE_RETRY_QUEUE:wa.message.send.retry}
+    webhook-routing-key: ${WA_WEBHOOK_ROUTING_KEY:webhook.receive}
+    webhook-queue: ${WA_WEBHOOK_QUEUE:wa.webhook.receive}
+    campaign-routing-key: ${WA_CAMPAIGN_ROUTING_KEY:campaign.recipient.send}
+    campaign-queue: ${WA_CAMPAIGN_QUEUE:wa.campaign.recipient.send}
+    campaign-retry-routing-key: ${WA_CAMPAIGN_RETRY_ROUTING_KEY:campaign.recipient.retry}
+    campaign-retry-queue: ${WA_CAMPAIGN_RETRY_QUEUE:wa.campaign.recipient.retry}
+  whatsapp:
+    graph-base-url: ${META_GRAPH_BASE_URL:https://graph.facebook.com}
+    graph-version: ${META_GRAPH_VERSION:v23.0}
+    access-token: ${META_WHATSAPP_ACCESS_TOKEN:}
+    app-secret: ${META_APP_SECRET:}
+    webhook-verify-token: ${META_WEBHOOK_VERIFY_TOKEN:}
+    media-download-directory: ${META_MEDIA_DOWNLOAD_DIRECTORY:./data/whatsapp-media}
+    max-send-attempts: ${META_MAX_SEND_ATTEMPTS:5}
+    retry-delay: ${META_RETRY_DELAY:30s}
+  inbox:
+    redis-topic: ${INBOX_REDIS_TOPIC:wa.inbox.events}
+  templates:
+    campaign-rate-per-minute: ${TEMPLATE_CAMPAIGN_RATE_PER_MINUTE:240}
+    max-recipient-attempts: ${TEMPLATE_MAX_RECIPIENT_ATTEMPTS:5}

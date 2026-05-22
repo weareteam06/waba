@@ -1,0 +1,13 @@
+logging:
+  level:
+    root: INFO
+    com.whatsaas: INFO
+
+spring:
+  flyway:
+    # Production schemas must be baselined deliberately after schema verification.
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false

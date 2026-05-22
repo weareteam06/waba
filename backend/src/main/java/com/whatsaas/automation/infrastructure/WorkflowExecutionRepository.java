@@ -1,0 +1,3 @@
+package com.whatsaas.automation.infrastructure;
+import com.whatsaas.automation.domain.*; import java.time.Instant; import java.util.List; import java.util.Optional; import org.springframework.data.jpa.repository.JpaRepository;
+public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecution,Long>{Optional<WorkflowExecution> findByTenantIdAndId(Long tenantId,Long id);List<WorkflowExecution> findTop100ByTenantIdAndWorkflowIdOrderByStartedAtDesc(Long tenantId,Long workflowId);List<WorkflowExecution> findTop100ByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(List<WorkflowExecutionStatus> statuses,Instant now);}
