@@ -20,7 +20,8 @@ The current application includes:
 - Realtime inbox REST APIs, STOMP WebSocket updates, Redis Pub/Sub fanout, typing, unread state, assignment, and media preview.
 - WhatsApp template CRUD, Meta template sync, template analytics snapshots, and bulk campaign scheduling.
 - Automation workflow authoring, publish/version history, triggers, execution history, and processor-based nodes.
-- Frontend pages for login, dashboard, inbox, templates, analytics, campaigns, settings, and workflow flows.
+- Frontend pages for login, dashboard, inbox, contacts, templates, campaigns, AI, flows, analytics, reports, team,
+  integrations, billing, and settings.
 
 ## Stack
 
@@ -38,10 +39,18 @@ Backend:
 
 Frontend:
 
-- Next.js App Router
+- Next.js 15 App Router
 - TypeScript
 - Tailwind CSS
-- Local reusable UI primitives
+- shadcn-style reusable UI primitives
+- Framer Motion
+- Zustand
+- TanStack Query
+- React Hook Form and Zod
+- Recharts
+- react-window
+- next-themes
+- Socket.IO client adapter
 - STOMP WebSocket client
 - React Flow workflow authoring
 

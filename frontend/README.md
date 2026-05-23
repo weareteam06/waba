@@ -1,21 +1,89 @@
 # WA Command Frontend
 
-Next.js App Router, TypeScript, and Tailwind operations UI for the WA Command backend.
+Next.js 15 App Router, TypeScript, Tailwind, and enterprise-grade UI architecture for the WA Command backend.
 
 ## Structure
 
-- `app/(workspace)/` contains dashboard, inbox, templates, analytics, campaigns, and settings routes in the shared SaaS shell.
-- `app/login/` contains the authentication entry surface.
-- `components/app-shell.tsx` owns responsive navigation, workspace search, dark-mode control, and route shortcuts.
-- `components/ui/` contains local shadcn-style primitives used by feature components.
-- `components/inbox-workspace.tsx` contains the backend-aware realtime inbox surface and virtualized conversation list.
-- `components/workspace-panels.tsx` contains shared metric, status, header, skeleton, and empty-state patterns.
-- `lib/inbox-api.ts` wraps durable REST pagination and mutations.
-- `lib/inbox-realtime.ts` connects STOMP WebSocket updates for the active tenant.
-- `lib/inbox-types.ts` is the UI contract for conversations, messages, and realtime events.
-- `app/flows` and `components/workflow-builder.tsx` provide React Flow workflow authoring.
+The frontend now has a scalable `src/` architecture:
+
+```text
+src/
+|-- components/   reusable UI primitives, charts, page shell, virtualized list
+|-- config/       workspace navigation
+|-- constants/    demo/product constants for not-yet-backed modules
+|-- features/     auth, dashboard, and enterprise module pages
+|-- layouts/      enterprise workspace shell
+|-- lib/          shared helpers
+|-- providers/    next-themes and TanStack Query providers
+|-- services/     TanStack Query hooks over backend APIs
+|-- store/        Zustand UI state
+`-- websocket/    Socket.IO client adapter for future realtime channels
+```
+
+Existing backend-specific contracts remain in:
+
+- `lib/api-client.ts` for authenticated REST, refresh-token retry, and session utilities.
+- `lib/workspace-api.ts` for tenant, user, account, template, campaign, analytics, and message APIs.
+- `lib/inbox-api.ts` and `lib/inbox-realtime.ts` for inbox REST and STOMP WebSocket updates.
+- `lib/workflow-api.ts` for React Flow workflow authoring APIs.
+
+## Active Route Flow
+
+Next.js loads the frontend in this order:
+
+1. `app/layout.tsx` wraps every route with `src/providers/app-providers.tsx`.
+2. `src/providers/app-providers.tsx` installs `next-themes` and TanStack Query.
+3. Workspace routes under `app/(workspace)/` use `app/(workspace)/layout.tsx`.
+4. `app/(workspace)/layout.tsx` renders `src/layouts/enterprise-shell.tsx`.
+5. `src/layouts/enterprise-shell.tsx` applies route protection through `components/session-gate.tsx`, then renders the
+   collapsible sidebar, top nav, command palette, notification drawer, and right context panel.
+6. Each route page imports its feature module.
+
+App routes:
+
+| Route | Active file |
+| --- | --- |
+| `/login` | `src/features/auth/auth-page.tsx` |
+| `/dashboard` | `src/features/dashboard/dashboard-page.tsx` |
+| `/inbox` | `components/inbox-workspace.tsx` |
+| `/contacts` | `src/features/module-pages/enterprise-module-page.tsx` |
+| `/templates` | `src/features/templates/template-management-page.tsx` |
+| `/campaigns` | `components/campaigns-workspace.tsx` |
+| `/ai` | `src/features/module-pages/enterprise-module-page.tsx` |
+| `/flows` | `components/workflow-builder.tsx` |
+| `/analytics` | `components/analytics-workspace.tsx` |
+| `/reports` | `src/features/module-pages/enterprise-module-page.tsx` |
+| `/team` | `src/features/module-pages/enterprise-module-page.tsx` |
+| `/integrations` | `src/features/module-pages/enterprise-module-page.tsx` |
+| `/billing` | `src/features/module-pages/enterprise-module-page.tsx` |
+| `/settings` | `components/settings-workspace.tsx` |
+
+`src/features/templates/template-management-page.tsx` is the active `/templates` UI. It uses
+`src/features/templates/template-api.ts` to map the premium template builder to the existing backend template APIs.
 
 ## Runtime
+
+During local development, run the app from the `frontend` folder:
+
+```bash
+npm run dev
+```
+
+`npm run dev` starts Next with an isolated clean development output folder: `.next-dev`. Production builds continue to
+use `.next`. This prevents `npm run build` from overwriting the dev-server chunks that the browser is trying to load.
+
+If you want to reuse the existing dev cache for a faster restart, run:
+
+```bash
+npm run dev:reuse
+```
+
+If the browser reports 404s for `/_next/static/chunks/webpack.js`, `main-app.js`, `app/layout.js`, or
+`/_next/static/css/app/layout.css`, stop the terminal running Next and start it again with `npm run dev`.
+
+The app also serves `/favicon.ico` from `app/favicon.ico/route.ts`. If Chrome shows a hydration warning containing
+`bis_skin_checked`, that attribute is injected by a browser extension before React hydrates the page. Disable the extension
+or test in an incognito window without extensions to confirm; it is not generated by the application source.
 
 Set values from `.env.example`, open `/login`, then sign in or create the first tenant admin. Access and refresh tokens
 are stored in a local browser session for this standalone frontend and are refreshed by the shared API client before REST
@@ -36,3 +104,38 @@ keyboard access, `Ctrl K` workspace search focus, `G I` inbox routing, `G D` das
 `/flows` authors visual workflow graphs with draggable trigger, condition, delay, webhook, WhatsApp text, and future AI
 placeholder nodes. The builder saves draft JSON, publishes immutable versions, and shows recent execution analytics and
 history from the backend workflow APIs.
+
+## UI Architecture
+
+The enterprise shell combines a collapsible sidebar, mobile drawer, top navbar, command palette, notification drawer,
+breadcrumbs, workspace switching affordance, and a right context panel. It uses Framer Motion for page transitions,
+drawer motion, command palette transitions, and micro-interactions.
+
+The design system includes shadcn-style primitives for buttons, cards, badges, inputs, textareas, avatars, skeletons,
+charts, and virtualized lists. Styling uses the premium SaaS palette:
+
+- Background `#0F172A`
+- Surface `#1E293B`
+- Accent Blue `#38BDF8`
+- Purple Accent `#A78BFA`
+- Highlight `#F59E0B`
+- Text `#F8FAFC`
+
+## Runtime Libraries
+
+Installed and wired:
+
+- `framer-motion`
+- `zustand`
+- `@tanstack/react-query`
+- `react-hook-form`
+- `zod`
+- `@hookform/resolvers`
+- `recharts`
+- `react-window`
+- `next-themes`
+- `socket.io-client`
+- Radix primitives for shadcn-style composition
+
+The app remains wired to the current Spring Boot backend where endpoints exist. Modules such as Contacts, AI, Team,
+Integrations, Billing, and Reports have production-quality UI scaffolds ready for backend endpoint expansion.

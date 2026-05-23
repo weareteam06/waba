@@ -1,3 +1,4 @@
 .next/
+.next-dev/
 .npm-cache/
 node_modules/

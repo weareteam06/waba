@@ -1,6 +1,5 @@
-import { AppShell } from "@/components/app-shell";
-import { SessionGate } from "@/components/session-gate";
+import { EnterpriseShell } from "@/src/layouts/enterprise-shell";
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
-  return <SessionGate><AppShell>{children}</AppShell></SessionGate>;
+  return <EnterpriseShell>{children}</EnterpriseShell>;
 }
