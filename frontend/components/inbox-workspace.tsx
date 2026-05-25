@@ -15,7 +15,7 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge, Skeleton, Surface } from "@/components/ui/surface";
 import {
@@ -59,22 +59,32 @@ export function InboxWorkspace() {
     [conversations, selectedId],
   );
 
+  const loadConversationPage = useCallback(async () => {
+    if (loadingConversations) return;
+    setLoadingConversations(true);
+    try {
+      const page = await loadConversations(filter, query, conversationPage);
+      setConversations((items) => mergeConversations(items, page.items));
+      setSelectedId((id) => id ?? page.items[0]?.id ?? null);
+      setConversationPage(page.nextPage);
+      setConversationHasMore(page.hasMore);
+    } catch {
+      setError("Conversation list could not load.");
+    } finally {
+      setLoadingConversations(false);
+    }
+  }, [conversationPage, filter, loadingConversations, query]);
+
   useEffect(() => {
-    if (!conversationHasMore || loadingConversations) return;
-    const observer = observe(listSentinel.current, () => {
-      setLoadingConversations(true);
-      loadConversations(filter, query, conversationPage)
-        .then((page) => {
-          setConversations((items) => mergeConversations(items, page.items));
-          setSelectedId((id) => id ?? page.items[0]?.id ?? null);
-          setConversationPage(page.nextPage);
-          setConversationHasMore(page.hasMore);
-        })
-        .catch(() => setError("Conversation list could not load."))
-        .finally(() => setLoadingConversations(false));
-    });
+    if (conversationPage !== 0 || !conversationHasMore || loadingConversations) return;
+    void loadConversationPage();
+  }, [conversationHasMore, conversationPage, loadConversationPage, loadingConversations]);
+
+  useEffect(() => {
+    if (!conversationHasMore || loadingConversations || conversations.length === 0) return;
+    const observer = observe(listSentinel.current, () => void loadConversationPage());
     return () => observer?.disconnect();
-  }, [conversationHasMore, conversationPage, filter, loadingConversations, query]);
+  }, [conversationHasMore, conversations.length, loadConversationPage, loadingConversations]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

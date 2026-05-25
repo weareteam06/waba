@@ -1,6 +1,6 @@
 "use client";
 
-import { PhoneCall, UserPlus } from "lucide-react";
+import { CheckCircle2, PhoneCall, RefreshCw, UserPlus } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge, Skeleton, Surface } from "@/components/ui/surface";
@@ -12,6 +12,7 @@ export function SettingsWorkspace() {
   const [accounts, setAccounts] = useState<api.Account[]>([]);
   const [users, setUsers] = useState<api.User[]>([]);
   const [busy, setBusy] = useState(true);
+  const [savingAccount, setSavingAccount] = useState(false);
   const [notice, setNotice] = useState("");
   const [account, setAccount] = useState({ phoneNumberId: "", wabaId: "", displayPhoneNumber: "" });
   const [user, setUser] = useState({ displayName: "", email: "", password: "", role: "AGENT" });
@@ -29,12 +30,15 @@ export function SettingsWorkspace() {
 
   async function createAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSavingAccount(true);
+    setNotice("");
     try {
-      await api.registerAccount(account);
+      const saved = await api.registerAccount(account);
       setAccount({ phoneNumberId: "", wabaId: "", displayPhoneNumber: "" });
-      setNotice("WhatsApp account registered.");
       await load();
+      setNotice(`WhatsApp account ${saved.phoneNumberId} registered and loaded.`);
     } catch (cause) { setNotice(message(cause)); }
+    finally { setSavingAccount(false); }
   }
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
@@ -50,8 +54,8 @@ export function SettingsWorkspace() {
   return <main><PageHeader title="Settings" description="Manage tenant context, WhatsApp Cloud API account registration, and workspace users." />
     <section className="grid gap-4 px-4 py-5 sm:px-6 xl:grid-cols-2">
       <Surface className="p-5"><h2 className="text-lg font-semibold">Tenant</h2>{busy ? <Skeleton className="mt-4 h-20" /> : tenant ? <div className="mt-4 rounded-md bg-[var(--panel-strong)] p-4"><b className="block text-xl">{tenant.name}</b><span className="mt-1 block text-sm text-[var(--muted)]">{tenant.slug} · tenant #{tenant.id}</span><Badge className="mt-3">{tenant.status}</Badge></div> : <p className="mt-3 text-sm text-[var(--muted)]">Tenant data unavailable.</p>}{notice && <p role="status" className="mt-4 text-sm text-[var(--muted)]">{notice}</p>}</Surface>
-      <Surface className="p-5"><h2 className="text-lg font-semibold">Register phone number</h2><form className="mt-4 grid gap-3" onSubmit={createAccount}><Input label="Phone number id" value={account.phoneNumberId} onChange={(phoneNumberId) => setAccount((item) => ({ ...item, phoneNumberId }))} /><Input label="WABA id" value={account.wabaId} onChange={(wabaId) => setAccount((item) => ({ ...item, wabaId }))} /><Input label="Display phone" value={account.displayPhoneNumber} onChange={(displayPhoneNumber) => setAccount((item) => ({ ...item, displayPhoneNumber }))} optional /><Button variant="primary" type="submit"><PhoneCall className="h-4 w-4" />Register account</Button></form></Surface>
-      <Surface className="overflow-hidden"><div className="border-b border-[var(--line)] p-4 text-sm font-semibold">WhatsApp accounts</div>{accounts.length === 0 ? <p className="p-5 text-sm text-[var(--muted)]">No phone numbers registered.</p> : accounts.map((item) => <div key={item.id} className="border-b border-[var(--line)] p-4 last:border-0"><b className="block">{item.displayPhoneNumber || item.phoneNumberId}</b><span className="block text-sm text-[var(--muted)]">Phone id {item.phoneNumberId} · WABA {item.wabaId}</span></div>)}</Surface>
+      <Surface className="p-5"><div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Register phone number</h2>{accounts.length > 0 && <Badge>{accounts.length} connected</Badge>}</div><form className="mt-4 grid gap-3" onSubmit={createAccount}><Input label="Phone number id" value={account.phoneNumberId} onChange={(phoneNumberId) => setAccount((item) => ({ ...item, phoneNumberId }))} /><Input label="WABA id" value={account.wabaId} onChange={(wabaId) => setAccount((item) => ({ ...item, wabaId }))} /><Input label="Display phone" value={account.displayPhoneNumber} onChange={(displayPhoneNumber) => setAccount((item) => ({ ...item, displayPhoneNumber }))} optional /><Button variant="primary" type="submit" disabled={savingAccount}>{savingAccount ? <RefreshCw className="h-4 w-4 animate-spin" /> : <PhoneCall className="h-4 w-4" />}{savingAccount ? "Registering" : "Register account"}</Button><p className="text-xs text-[var(--muted)]">This phone number is used to match incoming Meta webhooks by phone number id.</p></form></Surface>
+      <Surface className="overflow-hidden"><div className="flex items-center justify-between border-b border-[var(--line)] p-4 text-sm font-semibold"><span>WhatsApp accounts</span><Button variant="ghost" onClick={() => void load()} disabled={busy}><RefreshCw className="h-4 w-4" />Refresh</Button></div>{busy ? <div className="grid gap-3 p-5"><Skeleton className="h-16" /><Skeleton className="h-16" /></div> : accounts.length === 0 ? <p className="p-5 text-sm text-[var(--muted)]">No phone numbers registered yet. Add the Phone Number ID and WABA ID from Meta, then refresh this list.</p> : accounts.map((item) => <div key={item.id} className="grid gap-2 border-b border-[var(--line)] p-4 last:border-0"><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><b className="block">{item.displayPhoneNumber || item.phoneNumberId}</b></div><span className="block break-all text-sm text-[var(--muted)]">Phone id {item.phoneNumberId}</span><span className="block break-all text-sm text-[var(--muted)]">WABA {item.wabaId}</span></div>)}</Surface>
       <Surface className="p-5"><h2 className="text-lg font-semibold">Create user</h2><form className="mt-4 grid gap-3" onSubmit={createUser}><Input label="Display name" value={user.displayName} onChange={(displayName) => setUser((item) => ({ ...item, displayName }))} /><Input label="Email" value={user.email} onChange={(email) => setUser((item) => ({ ...item, email }))} type="email" /><Input label="Password" value={user.password} onChange={(password) => setUser((item) => ({ ...item, password }))} type="password" /><label className="grid gap-1.5 text-sm font-medium">Role<select value={user.role} onChange={(event) => setUser((item) => ({ ...item, role: event.target.value }))} className="h-11 rounded-md border border-[var(--line)] bg-[var(--panel-strong)] px-3"><option>AGENT</option><option>AUDITOR</option><option>TENANT_ADMIN</option></select></label><Button variant="primary" type="submit"><UserPlus className="h-4 w-4" />Create user</Button></form></Surface>
       <Surface className="overflow-hidden xl:col-span-2"><div className="border-b border-[var(--line)] p-4 text-sm font-semibold">Users</div>{users.length === 0 ? <p className="p-5 text-sm text-[var(--muted)]">User listing is available to tenant admins and auditors.</p> : users.map((item) => <div key={item.id} className="grid gap-2 border-b border-[var(--line)] p-4 last:border-0 md:grid-cols-[minmax(0,1fr)_180px_200px]"><b>{item.displayName}</b><span className="text-sm text-[var(--muted)]">{item.email}</span><span className="flex flex-wrap gap-1">{item.roles.map((role) => <Badge key={role}>{role}</Badge>)}</span></div>)}</Surface>
     </section></main>;

@@ -137,7 +137,15 @@ export function TemplateManagementPage() {
   return (
     <main className="min-h-[calc(100dvh-4rem)] bg-[#0F172A] text-[#F8FAFC]">
       <div className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)_390px]">
-        <TemplateSidebar templates={templates} loading={isLoading} onCreate={createTemplate} />
+        <TemplateSidebar
+          templates={templates}
+          loading={isLoading}
+          accountsReady={accounts.length > 0}
+          syncing={syncMutation.isPending}
+          notice={notice}
+          onCreate={createTemplate}
+          onSync={() => syncMutation.mutate()}
+        />
         <section className="min-w-0 border-x border-white/8 bg-[#0F172A]">
           {selected ? (
             <TemplateEditor
@@ -180,7 +188,23 @@ export function TemplateManagementPage() {
   );
 }
 
-export const TemplateSidebar = memo(function TemplateSidebar({ templates, loading, onCreate }: { templates: EnterpriseTemplate[]; loading: boolean; onCreate: () => void }) {
+export const TemplateSidebar = memo(function TemplateSidebar({
+  templates,
+  loading,
+  accountsReady,
+  syncing,
+  notice,
+  onCreate,
+  onSync,
+}: {
+  templates: EnterpriseTemplate[];
+  loading: boolean;
+  accountsReady: boolean;
+  syncing: boolean;
+  notice: string;
+  onCreate: () => void;
+  onSync: () => void;
+}) {
   const { search, category, status, selectedId, setSearch, setCategory, setStatus, setSelectedId } = useTemplateWorkspaceStore();
   const [visibleCount, setVisibleCount] = useState(8);
   const filtered = useMemo(() => {
@@ -205,8 +229,15 @@ export const TemplateSidebar = memo(function TemplateSidebar({ templates, loadin
             <p className="text-xs font-medium uppercase text-[#94A3B8]">Template hub</p>
             <h1 className="mt-1 text-xl font-semibold">WhatsApp templates</h1>
           </div>
-          <Button size="icon" variant="primary" aria-label="Create template" onClick={onCreate}><Plus className="h-4 w-4" /></Button>
+          <div className="flex gap-2">
+            <Button size="icon" variant="secondary" aria-label="Sync templates from Meta" onClick={onSync} disabled={!accountsReady || syncing}>
+              <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            </Button>
+            <Button size="icon" variant="primary" aria-label="Create template" onClick={onCreate} disabled={!accountsReady}><Plus className="h-4 w-4" /></Button>
+          </div>
         </div>
+        {!accountsReady && <p className="mt-3 rounded-lg border border-[#F59E0B]/25 bg-[#F59E0B]/10 p-2 text-xs text-[#FDE68A]">Register a WhatsApp phone number in Settings before syncing or creating templates.</p>}
+        {notice && <p role="status" className="mt-3 rounded-lg border border-white/10 bg-white/6 p-2 text-xs text-[#CBD5E1]">{notice}</p>}
         <label className="mt-4 flex h-11 items-center gap-2 rounded-lg border border-white/10 bg-white/7 px-3 text-sm text-[#94A3B8] focus-within:border-[#38BDF8]">
           <Search className="h-4 w-4" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search templates" className="min-w-0 flex-1 bg-transparent text-[#F8FAFC] outline-none placeholder:text-[#94A3B8]" />
@@ -226,11 +257,21 @@ export const TemplateSidebar = memo(function TemplateSidebar({ templates, loadin
           <div className="grid gap-3 p-1">{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-28 rounded-lg" />)}</div>
         ) : (
           <motion.div layout className="grid gap-3">
-            <AnimatePresence mode="popLayout">
-              {visible.map((template) => (
-                <TemplateCard key={template.id} template={template} active={template.id === selectedId} onSelect={() => setSelectedId(template.id)} />
-              ))}
-            </AnimatePresence>
+            {filtered.length === 0 ? (
+              <div className="rounded-lg border border-white/8 bg-white/5 p-4 text-sm text-[#94A3B8]">
+                <p className="font-medium text-[#F8FAFC]">No templates loaded</p>
+                <p className="mt-1">Sync from Meta after registering your WABA phone number in Settings.</p>
+                <Button className="mt-3" variant="secondary" onClick={onSync} disabled={!accountsReady || syncing}>
+                  <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />{syncing ? "Syncing" : "Sync Meta"}
+                </Button>
+              </div>
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {visible.map((template) => (
+                  <TemplateCard key={template.id} template={template} active={template.id === selectedId} onSelect={() => setSelectedId(template.id)} />
+                ))}
+              </AnimatePresence>
+            )}
             {visible.length < filtered.length && (
               <Button variant="ghost" onClick={() => setVisibleCount((count) => count + 8)}>Load more</Button>
             )}

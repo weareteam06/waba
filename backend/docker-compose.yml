@@ -15,6 +15,10 @@ services:
       RABBITMQ_USERNAME: wa_app
       RABBITMQ_PASSWORD: change-me
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      META_WHATSAPP_ACCESS_TOKEN: ${META_WHATSAPP_ACCESS_TOKEN:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v25.0}
     depends_on:
       mysql:
         condition: service_healthy

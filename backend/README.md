@@ -99,7 +99,10 @@ Swagger UI is exposed at `/swagger-ui.html` and OpenAPI JSON at `/v3/api-docs`.
 
 ## Runtime
 
-Create a local `.env` from `.env.example`, then start the stack:
+Create a local `.env` from `.env.example`. The Spring Boot app imports `backend/.env` during local runs, and Docker
+Compose passes the Meta Cloud API values into the API container. Never commit `backend/.env`.
+
+Start the stack:
 
 ```powershell
 docker compose up --build
