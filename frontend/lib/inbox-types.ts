@@ -22,6 +22,8 @@ export type InboxMessage = {
   status: string;
   mediaMimeType: string | null;
   mediaUrl: string | null;
+  sendAttempts: number;
+  lastError: string | null;
   createdAt: string;
   optimistic?: boolean;
 };
@@ -32,12 +34,18 @@ export type Page<T> = {
   nextPage: number;
 };
 
+export type StartConversationResult = {
+  conversation: Conversation;
+  message: InboxMessage;
+};
+
 export type InboxEvent = {
   tenantId: number;
-  type: "CONVERSATION_CHANGED" | "MESSAGE_CREATED" | "MESSAGE_STATUS_CHANGED" | "TYPING_CHANGED";
+  type: "CONVERSATION_CHANGED" | "CONVERSATION_DELETED" | "MESSAGE_CREATED" | "MESSAGE_DELETED" | "MESSAGE_STATUS_CHANGED" | "TYPING_CHANGED";
   conversationId: number;
   conversation: Conversation | null;
   message: InboxMessage | null;
   actorId: number | null;
   typing: boolean | null;
+  deletedMessageId: number | null;
 };

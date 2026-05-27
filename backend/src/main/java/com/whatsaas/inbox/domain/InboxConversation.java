@@ -58,8 +58,24 @@ public class InboxConversation extends AuditableEntity {
         this.unreadCount++;
     }
 
+    public void rename(String contactName) {
+        this.contactName = contactName == null || contactName.isBlank() ? this.contactName : contactName.trim();
+    }
+
     public void send(String preview) {
         touch(preview);
+    }
+
+    public void restateLastMessage(String preview, Instant lastMessageAt) {
+        this.lastMessageAt = lastMessageAt == null ? Instant.now() : lastMessageAt;
+        this.lastMessagePreview = preview == null || preview.isBlank() ? "Media message" : preview.substring(0,
+                Math.min(512, preview.length()));
+    }
+
+    public void clearMessages() {
+        this.lastMessageAt = Instant.now();
+        this.lastMessagePreview = "No messages";
+        this.unreadCount = 0;
     }
 
     public void markRead() {

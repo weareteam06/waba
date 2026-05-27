@@ -49,6 +49,7 @@ export type EnterpriseTemplate = {
   footer: string;
   buttons: TemplateButton[];
   variables: string[];
+  variableSamples?: Record<string, string>;
   updatedAt: string;
   quality: number;
   insight: TemplateInsight;

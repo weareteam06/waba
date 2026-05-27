@@ -1,49 +1,55 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: dark;
-  --canvas: #0f172a;
-  --panel: #1e293b;
-  --panel-strong: #263449;
-  --ink: #f8fafc;
-  --muted: #94a3b8;
-  --line: #334155;
-  --line-strong: #475569;
-  --accent: #38bdf8;
-  --accent-strong: #7dd3fc;
-  --accent-soft: rgb(56 189 248 / 0.14);
-  --purple: #a78bfa;
+  color-scheme: light;
+  --canvas: #f8fafc;
+  --panel: #ffffff;
+  --panel-strong: #f1f5f9;
+  --ink: #111827;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --primary: #1877f2;
+  --primary-strong: #0f5ecb;
+  --primary-soft: rgb(24 119 242 / 0.11);
+  --accent: #25d366;
+  --accent-strong: #16a34a;
+  --accent-soft: rgb(37 211 102 / 0.13);
+  --purple: #7c3aed;
   --highlight: #f59e0b;
-  --danger: #fb7185;
-  --warning: #fbbf24;
-  --success: #34d399;
-  --sidebar: #0b1120;
-  --sidebar-ink: #f8fafc;
-  --chat: #111827;
-  --shadow: 0 24px 80px rgb(0 0 0 / 0.32);
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #22c55e;
+  --sidebar: #f1f5f9;
+  --sidebar-ink: #111827;
+  --chat: #f8fafc;
+  --shadow: 0 16px 40px rgb(15 23 42 / 0.08);
 }
 
 .light {
   color-scheme: light;
   --canvas: #f8fafc;
   --panel: #ffffff;
-  --panel-strong: #eef2ff;
-  --ink: #0f172a;
+  --panel-strong: #f1f5f9;
+  --ink: #111827;
   --muted: #64748b;
-  --line: #dbe3ef;
+  --line: #e2e8f0;
   --line-strong: #cbd5e1;
-  --accent: #0284c7;
-  --accent-strong: #0369a1;
-  --accent-soft: rgb(2 132 199 / 0.11);
+  --primary: #1877f2;
+  --primary-strong: #0f5ecb;
+  --primary-soft: rgb(24 119 242 / 0.11);
+  --accent: #25d366;
+  --accent-strong: #16a34a;
+  --accent-soft: rgb(37 211 102 / 0.13);
   --purple: #7c3aed;
-  --highlight: #d97706;
-  --danger: #e11d48;
-  --warning: #d97706;
-  --success: #059669;
-  --sidebar: #0f172a;
-  --sidebar-ink: #f8fafc;
-  --chat: #eef4f8;
-  --shadow: 0 24px 80px rgb(15 23 42 / 0.12);
+  --highlight: #f59e0b;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #22c55e;
+  --sidebar: #f1f5f9;
+  --sidebar-ink: #111827;
+  --chat: #f8fafc;
+  --shadow: 0 16px 40px rgb(15 23 42 / 0.08);
 }
 
 * {
@@ -92,7 +98,7 @@ button:disabled {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--panel-strong), color-mix(in srgb, var(--panel) 76%, var(--canvas)), var(--panel-strong));
+  background: linear-gradient(90deg, #e2e8f0, #f8fafc, #e2e8f0);
   background-size: 220% 100%;
   animation: shimmer 1.25s linear infinite;
 }
@@ -100,18 +106,15 @@ button:disabled {
 .chat-grid {
   background-color: var(--chat);
   background-image:
-    radial-gradient(circle at top left, rgb(56 189 248 / 0.08), transparent 32rem),
-    radial-gradient(circle at bottom right, rgb(167 139 250 / 0.09), transparent 28rem),
     linear-gradient(rgb(248 250 252 / 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgb(248 250 252 / 0.025) 1px, transparent 1px);
   background-size: 30px 30px;
 }
 
 .glass {
-  border: 1px solid rgb(255 255 255 / 0.12);
-  background: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.045));
+  border: 1px solid var(--line);
+  background: var(--panel);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
 }
 
 .scrollbar-thin {
@@ -145,18 +148,22 @@ button:disabled {
   min-width: 0;
   width: 100%;
   border-radius: 8px;
-  border: 1px solid rgb(255 255 255 / 0.08);
-  background: rgb(15 23 42 / 0.7);
+  border: 1px solid var(--line);
+  background: var(--panel);
   padding: 0.75rem;
-  color: #f8fafc;
+  color: var(--ink);
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
 .field-control:focus {
-  border-color: #38bdf8;
-  background: rgb(15 23 42 / 0.92);
-  box-shadow: 0 0 0 4px rgb(56 189 248 / 0.1);
+  border-color: var(--primary);
+  background: var(--panel);
+  box-shadow: 0 0 0 4px var(--primary-soft);
+}
+
+.field-control::placeholder {
+  color: var(--muted);
 }
 
 select.field-control {
@@ -201,6 +208,15 @@ select.field-control {
   40% {
     opacity: 1;
     transform: translateY(-2px);
+  }
+}
+
+@keyframes loading-bar {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(240%);
   }
 }
 

@@ -72,6 +72,7 @@ refresh-token family/reuse detection, and use a database-per-tenant or row-level
 - `POST /api/v1/messages/media`
 - `GET /api/v1/messages`
 - `GET /api/v1/inbox/conversations`
+- `POST /api/v1/inbox/conversations`
 - `GET /api/v1/inbox/conversations/{conversationId}/messages`
 - `POST /api/v1/inbox/conversations/{conversationId}/messages`
 - `PATCH /api/v1/inbox/conversations/{conversationId}/assignment`
@@ -92,6 +93,7 @@ refresh-token family/reuse detection, and use a database-per-tenant or row-level
 - `GET /api/v1/workflows/{workflowId}/executions`
 - `GET /api/v1/workflows/{workflowId}/analytics`
 - `POST /api/v1/whatsapp/accounts`
+- `GET /api/v1/whatsapp/accounts/readiness`
 - `GET /api/v1/webhooks/whatsapp`
 - `POST /api/v1/webhooks/whatsapp`
 
@@ -136,10 +138,14 @@ Flyway. Do not baseline at `V1` if the schema already contains tables or columns
 
 Set `META_WHATSAPP_ACCESS_TOKEN`, `META_APP_SECRET`, and `META_WEBHOOK_VERIFY_TOKEN`. The webhook callback path is
 `/api/v1/webhooks/whatsapp`. The POST endpoint validates `X-Hub-Signature-256` against the raw request bytes before it
-queues the payload for async processing.
+processes the payload immediately for realtime inbox updates. If immediate processing fails, the same payload is queued
+for async retry through RabbitMQ.
 
 Register each tenant phone number id with `POST /api/v1/whatsapp/accounts` before sending or receiving Cloud API traffic
 for that number. The webhook processor uses the incoming `metadata.phone_number_id` to resolve tenant ownership.
+Tenant admins can call `GET /api/v1/whatsapp/accounts/readiness` to verify whether Meta access token, app secret, webhook
+verify token, graph version, webhook path, media directory, and retry attempts are configured. This endpoint returns
+booleans and operational metadata only; it never returns secret values.
 
 Outbound text and media messages are stored before an after-commit Rabbit send event calls Meta Graph API. Failed sends
 are marked with the provider error and requeued through a TTL retry queue until `META_MAX_SEND_ATTEMPTS` is reached.
@@ -150,10 +156,13 @@ than spin on poison jobs.
 ## Realtime Inbox
 
 `inbox` persists conversation assignment, last-message preview, and unread state around the existing WhatsApp message
-table. REST endpoints page filtered conversation lists and reverse-chronological message history. Incoming WhatsApp
-webhooks, send reconciliation, assignment changes, read markers, and typing publish tenant-scoped inbox events into Redis
-Pub/Sub. Each Spring Boot node subscribes and forwards events to STOMP clients on `/topic/inbox/tenant/{tenantId}` after
-the WebSocket `CONNECT` bearer JWT and subscription tenant claim are validated.
+table. REST endpoints page filtered conversation lists, reverse-chronological message history, existing conversation
+replies, and new outbound start-chat messages. Starting a chat validates that the selected WhatsApp phone number belongs
+to the current tenant, creates or reuses the conversation, stores the outbound message, emits the Rabbit send event, and
+publishes the same realtime inbox event as normal replies. Incoming WhatsApp webhooks, send reconciliation, assignment
+changes, read markers, and typing publish tenant-scoped inbox events into Redis Pub/Sub. Each Spring Boot node subscribes
+and forwards events to STOMP clients on `/topic/inbox/tenant/{tenantId}` after the WebSocket `CONNECT` bearer JWT and
+subscription tenant claim are validated.
 
 ## Template Management
 

@@ -5,12 +5,13 @@ import java.time.Instant;
 
 public record InboxMessageResponse(Long id, Long conversationId, String clientMessageId, String metaMessageId,
                                    String direction, String type, String body, String status, String mediaMimeType,
-                                   String mediaUrl, Instant createdAt) {
+                                   String mediaUrl, int sendAttempts, String lastError, Instant createdAt) {
 
     public static InboxMessageResponse from(WhatsAppMessage message) {
         return new InboxMessageResponse(message.getId(), message.getConversationId(), null, message.getMetaMessageId(),
                 message.getDirection().name(), message.getType().name(), message.getBody(), message.getStatus().name(),
-                message.getMediaMimeType(), mediaUrl(message), message.getCreatedAt());
+                message.getMediaMimeType(), mediaUrl(message), message.getSendAttempts(), message.getLastError(),
+                message.getCreatedAt());
     }
 
     private static String mediaUrl(WhatsAppMessage message) {

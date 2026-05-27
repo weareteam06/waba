@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -14,15 +16,19 @@ import org.springframework.stereotype.Service;
 @Service
 public class WhatsAppWebhookService {
 
+    private static final Logger log = LoggerFactory.getLogger(WhatsAppWebhookService.class);
+
     private final MetaCloudProperties cloudProperties;
     private final RabbitTemplate rabbitTemplate;
     private final MessagingProperties messagingProperties;
+    private final WhatsAppWebhookProcessor webhookProcessor;
 
     public WhatsAppWebhookService(MetaCloudProperties cloudProperties, RabbitTemplate rabbitTemplate,
-                                  MessagingProperties messagingProperties) {
+                                  MessagingProperties messagingProperties, WhatsAppWebhookProcessor webhookProcessor) {
         this.cloudProperties = cloudProperties;
         this.rabbitTemplate = rabbitTemplate;
         this.messagingProperties = messagingProperties;
+        this.webhookProcessor = webhookProcessor;
     }
 
     public String verify(String mode, String token, String challenge) {
@@ -37,8 +43,13 @@ public class WhatsAppWebhookService {
 
     public void accept(byte[] rawBody, String signature) {
         validateSignature(rawBody, signature);
-        rabbitTemplate.convertAndSend(messagingProperties.exchange(), messagingProperties.webhookRoutingKey(),
-                new WebhookPayloadEvent(new String(rawBody, StandardCharsets.UTF_8)));
+        WebhookPayloadEvent event = new WebhookPayloadEvent(new String(rawBody, StandardCharsets.UTF_8));
+        try {
+            webhookProcessor.process(event);
+        } catch (Exception ex) {
+            log.warn("Immediate WhatsApp webhook processing failed; queueing payload for retry.", ex);
+            rabbitTemplate.convertAndSend(messagingProperties.exchange(), messagingProperties.webhookRoutingKey(), event);
+        }
     }
 
     private void validateSignature(byte[] rawBody, String signature) {

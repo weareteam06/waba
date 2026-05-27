@@ -11,7 +11,7 @@ export function Field({
     <label className="grid gap-1.5 text-sm font-medium text-[var(--ink)]">
       {label}
       <input
-        className={cn("h-11 rounded-xl border border-white/10 bg-white/8 px-3 text-sm outline-none transition focus:border-[var(--accent)]", className)}
+        className={cn("h-11 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-sm outline-none transition focus:border-[var(--primary)]", className)}
         {...props}
       />
       {error && <span className="text-xs text-[var(--danger)]">{error}</span>}
@@ -29,7 +29,7 @@ export function Textarea({
     <label className="grid gap-1.5 text-sm font-medium text-[var(--ink)]">
       {label}
       <textarea
-        className={cn("min-h-28 rounded-xl border border-white/10 bg-white/8 p-3 text-sm outline-none transition focus:border-[var(--accent)]", className)}
+        className={cn("min-h-28 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-3 text-sm outline-none transition focus:border-[var(--primary)]", className)}
         {...props}
       />
       {error && <span className="text-xs text-[var(--danger)]">{error}</span>}

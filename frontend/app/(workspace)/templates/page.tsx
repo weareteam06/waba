@@ -12,7 +12,7 @@ export default function TemplatesPage() {
 
 function TemplatesFallback() {
   return (
-    <main className="grid min-h-[calc(100dvh-4rem)] gap-4 bg-[#0F172A] p-4 xl:grid-cols-[340px_minmax(0,1fr)_390px]">
+    <main className="grid min-h-[calc(100dvh-4rem)] gap-4 bg-[var(--canvas)] p-4 xl:grid-cols-[340px_minmax(0,1fr)_390px]">
       <Skeleton className="rounded-lg" />
       <Skeleton className="rounded-lg" />
       <Skeleton className="rounded-lg" />

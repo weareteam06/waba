@@ -97,6 +97,8 @@ app:
     retry-delay: ${META_RETRY_DELAY:30s}
   inbox:
     redis-topic: ${INBOX_REDIS_TOPIC:wa.inbox.events}
+  push:
+    vapid-public-key: ${PUSH_VAPID_PUBLIC_KEY:}
   templates:
     campaign-rate-per-minute: ${TEMPLATE_CAMPAIGN_RATE_PER_MINUTE:240}
     max-recipient-attempts: ${TEMPLATE_MAX_RECIPIENT_ATTEMPTS:5}

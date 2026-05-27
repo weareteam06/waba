@@ -1,6 +1,7 @@
 package com.whatsaas.common.exception;
 
 import com.whatsaas.common.api.ApiResponse;
+import com.whatsaas.whatsapp.infrastructure.MetaProviderException;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -48,6 +49,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiResponse<ApiError>> handleAccessDenied(AccessDeniedException ex) {
         return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Access is denied.", Map.of());
+    }
+
+    @ExceptionHandler(MetaProviderException.class)
+    ResponseEntity<ApiResponse<ApiError>> handleMetaProvider(MetaProviderException ex) {
+        return error(HttpStatus.BAD_GATEWAY, "META_PROVIDER_ERROR", ex.getMessage(), Map.of());
     }
 
     @ExceptionHandler(Exception.class)

@@ -19,4 +19,9 @@ public interface WhatsAppMessageRepository extends JpaRepository<WhatsAppMessage
 
     Page<WhatsAppMessage> findByTenantIdAndConversationIdOrderByCreatedAtDesc(Long tenantId, Long conversationId,
                                                                                 Pageable pageable);
+
+    Optional<WhatsAppMessage> findFirstByTenantIdAndConversationIdOrderByCreatedAtDesc(Long tenantId,
+                                                                                       Long conversationId);
+
+    void deleteByTenantIdAndConversationId(Long tenantId, Long conversationId);
 }

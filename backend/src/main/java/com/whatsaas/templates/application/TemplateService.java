@@ -11,6 +11,7 @@ import com.whatsaas.templates.infrastructure.*;
 import com.whatsaas.whatsapp.application.WhatsAppAccountService;
 import com.whatsaas.whatsapp.domain.WhatsAppAccount;
 import com.whatsaas.whatsapp.infrastructure.MetaCloudApiClient;
+import com.whatsaas.whatsapp.infrastructure.MetaProviderException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -38,14 +39,29 @@ public class TemplateService {
     @Transactional
     public TemplateResponse create(TemplateUpsertRequest request) {
         WhatsAppAccount account = account(request.phoneNumberId());
-        WhatsAppTemplate template = templates.save(new WhatsAppTemplate(TenantContext.currentTenantId(),
-                account.getWabaId(), request.name(), request.language(), request.category(), json(request.components())));
-        JsonNode created = meta.createTemplate(account.getWabaId(), template.getName(), template.getLanguage(),
-                template.getCategory().name(), request.components());
-        template.update(template.getCategory().name(), created.path("status").asText("PENDING"),
-                template.getComponentsJson(), created.path("id").asText(null));
-        audit.record("TEMPLATE_CREATED", "WhatsAppTemplate", template.getId(), "{}");
-        return TemplateResponse.from(template);
+        Long tenantId = TenantContext.currentTenantId();
+        templates.findByTenantIdAndWabaIdAndNameAndLanguage(tenantId, account.getWabaId(), request.name(),
+                request.language()).ifPresent(existing -> {
+            throw new DomainException(HttpStatus.CONFLICT, "TEMPLATE_NAME_EXISTS",
+                    "A template with this name and language already exists. Use a different template name.");
+        });
+        try {
+            WhatsAppTemplate template = templates.save(new WhatsAppTemplate(tenantId, account.getWabaId(),
+                    request.name(), request.language(), request.category(), json(request.components())));
+            JsonNode created = meta.createTemplate(account.getWabaId(), template.getName(), template.getLanguage(),
+                    template.getCategory().name(), request.components());
+            template.update(template.getCategory().name(), created.path("status").asText("PENDING"),
+                    template.getComponentsJson(), created.path("id").asText(null));
+            audit.record("TEMPLATE_CREATED", "WhatsAppTemplate", template.getId(), "{}");
+            return TemplateResponse.from(template);
+        } catch (MetaProviderException ex) {
+            throw new DomainException(HttpStatus.BAD_GATEWAY, "META_TEMPLATE_CREATE_FAILED", ex.getMessage());
+        } catch (DomainException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new DomainException(HttpStatus.INTERNAL_SERVER_ERROR, "TEMPLATE_CREATE_FAILED",
+                    "Template creation failed before it could be saved. " + safeMessage(ex));
+        }
     }
 
     @Transactional
@@ -120,4 +136,8 @@ public class TemplateService {
     private WhatsAppAccount account(String phoneNumberId) { return accounts.requireOutboundAccount(TenantContext.currentTenantId(), phoneNumberId.trim()); }
     private WhatsAppTemplate require(Long id) { return templates.findByTenantIdAndId(TenantContext.currentTenantId(), id).orElseThrow(() -> new DomainException(HttpStatus.NOT_FOUND, "TEMPLATE_NOT_FOUND", "Template not found.")); }
     private String json(JsonNode node) { try { return mapper.writeValueAsString(node); } catch (Exception ex) { throw new IllegalArgumentException("Template JSON invalid.", ex); } }
+    private String safeMessage(Exception ex) {
+        String message = ex.getMessage();
+        return message == null || message.isBlank() ? ex.getClass().getSimpleName() : message;
+    }
 }

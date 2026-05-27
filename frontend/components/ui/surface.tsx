@@ -6,7 +6,7 @@ export function Surface({ className, ...props }: HTMLAttributes<HTMLDivElement>)
 }
 
 export function Badge({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
-  return <span className={cn("inline-flex min-h-6 items-center rounded-md bg-[var(--accent-soft)] px-2 text-xs font-medium text-[var(--accent-strong)]", className)} {...props} />;
+  return <span className={cn("inline-flex min-h-6 items-center rounded-md border border-[var(--line)] bg-[var(--panel-strong)] px-2 text-xs font-medium text-[var(--ink)]", className)} {...props} />;
 }
 
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

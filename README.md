@@ -17,7 +17,8 @@ The current application includes:
 
 - Tenant registration, login, JWT access tokens, refresh-token rotation, and role-based access control.
 - Tenant-scoped WhatsApp account registration, message storage, Cloud API send/webhook handling, media support, and retries.
-- Realtime inbox REST APIs, STOMP WebSocket updates, Redis Pub/Sub fanout, typing, unread state, assignment, and media preview.
+- Realtime inbox REST APIs, direct start-chat sending, STOMP WebSocket updates, Redis Pub/Sub fanout, typing, unread state,
+  assignment, and media preview.
 - WhatsApp template CRUD, Meta template sync, template analytics snapshots, and bulk campaign scheduling.
 - Automation workflow authoring, publish/version history, triggers, execution history, and processor-based nodes.
 - Frontend pages for login, dashboard, inbox, contacts, templates, campaigns, AI, flows, analytics, reports, team,
@@ -141,6 +142,8 @@ Read the focused docs for module details:
   [`backend/README.md`](backend/README.md)
 - Frontend structure, session model, routes, and UI runtime:
   [`frontend/README.md`](frontend/README.md)
+- Optional local Meta webhook logger/forwarder for testing:
+  [`tools/meta-webhook-forwarder/README.md`](tools/meta-webhook-forwarder/README.md)
 
 Swagger is available from a running backend at:
 

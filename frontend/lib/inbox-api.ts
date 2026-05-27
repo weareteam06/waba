@@ -1,4 +1,4 @@
-import type { Conversation, ConversationFilter, InboxMessage, Page } from "@/lib/inbox-types";
+import type { Conversation, ConversationFilter, InboxMessage, Page, StartConversationResult } from "@/lib/inbox-types";
 import { apiRequest, currentAccessToken } from "@/lib/api-client";
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -21,6 +21,19 @@ export function sendMessage(conversationId: number, body: string, clientMessageI
   });
 }
 
+export function startConversation(input: {
+  phoneNumberId: string;
+  recipient: string;
+  contactName?: string;
+  body: string;
+  clientMessageId: string;
+}) {
+  return request<StartConversationResult>("/api/v1/inbox/conversations", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function markRead(conversationId: number) {
   return request<Conversation>(`/api/v1/inbox/conversations/${conversationId}/read`, { method: "POST" });
 }
@@ -30,6 +43,14 @@ export function assignConversation(conversationId: number, agentId: number) {
     method: "PATCH",
     body: JSON.stringify({ agentId }),
   });
+}
+
+export function deleteConversation(conversationId: number) {
+  return request<void>(`/api/v1/inbox/conversations/${conversationId}`, { method: "DELETE" });
+}
+
+export function deleteMessage(conversationId: number, messageId: number) {
+  return request<void>(`/api/v1/inbox/conversations/${conversationId}/messages/${messageId}`, { method: "DELETE" });
 }
 
 export function publishTyping(conversationId: number, typing: boolean) {

@@ -5,12 +5,29 @@ type MetaComponent = {
   type?: string;
   format?: string;
   text?: string;
+  example?: {
+    header_text?: string[];
+    body_text?: string[][];
+  };
   buttons?: Array<{ type?: string; text?: string; url?: string; phone_number?: string; example?: string[] }>;
 };
 
 const fallbackHistory = [
   { id: "synced", label: "Local catalog", detail: "Synced from backend", at: "Now" },
 ];
+
+const variableExamples: Record<string, string> = {
+  first_name: "Aarav",
+  plan_name: "Scale",
+  renewal_date: "May 31",
+  invoice_id: "INV-2049",
+  order_id: "ORD-2049",
+  date: "May 31",
+  code: "25OFF",
+  minutes: "10",
+  discount: "25%",
+  workspace: "Northstar",
+};
 
 export async function fetchEnterpriseTemplates() {
   const [templates, accounts] = await Promise.all([api.templates(), api.accounts().catch(() => [])]);
@@ -50,11 +67,12 @@ export async function syncEnterpriseTemplates(phoneNumberId?: string) {
   return synced.map((template) => toEnterpriseTemplate(template, selectedPhoneNumberId));
 }
 
-export function createDraftTemplate(phoneNumberId?: string): EnterpriseTemplate {
+export function createDraftTemplate(phoneNumberId?: string, existingNames: string[] = []): EnterpriseTemplate {
+  const name = uniqueTemplateName(existingNames);
   return {
     id: `draft-${crypto.randomUUID()}`,
     phoneNumberId,
-    name: "new_template",
+    name,
     category: "Utility",
     status: "Draft",
     language: "English (US)",
@@ -68,11 +86,22 @@ export function createDraftTemplate(phoneNumberId?: string): EnterpriseTemplate 
     footer: "",
     buttons: [],
     variables: ["first_name"],
+    variableSamples: { first_name: variableExamples.first_name },
     updatedAt: "Draft",
     quality: 72,
     insight: emptyInsight(72),
     history: [{ id: "draft", label: "Draft created", detail: "Not submitted to backend yet", at: "Now" }],
   };
+}
+
+function uniqueTemplateName(existingNames: string[]) {
+  const names = new Set(existingNames.map((item) => item.toLowerCase()));
+  if (!names.has("new_template")) return "new_template";
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `new_template_${index}`;
+    if (!names.has(candidate)) return candidate;
+  }
+  return `new_template_${Date.now()}`;
 }
 
 function toEnterpriseTemplate(template: api.Template, phoneNumberId?: string): EnterpriseTemplate {
@@ -81,6 +110,7 @@ function toEnterpriseTemplate(template: api.Template, phoneNumberId?: string): E
   const header = components.find((item) => item.type === "HEADER");
   const footer = componentText(components, "FOOTER");
   const buttons = toButtons(components);
+  const variables = uniqueStrings([...extractVariables(header?.text ?? ""), ...extractVariables(body)]);
   const status = toUiStatus(template.approvalStatus);
   const quality = status === "Approved" ? 92 : status === "Rejected" ? 42 : status === "Paused" ? 70 : 76;
 
@@ -103,7 +133,8 @@ function toEnterpriseTemplate(template: api.Template, phoneNumberId?: string): E
     body,
     footer,
     buttons,
-    variables: extractVariables(body),
+    variables,
+    variableSamples: toSampleMap(variables, components),
     updatedAt: relativeDate(template.syncedAt),
     quality,
     insight: emptyInsight(quality),
@@ -117,12 +148,23 @@ function toEnterpriseTemplate(template: api.Template, phoneNumberId?: string): E
 function toMetaComponents(template: EnterpriseTemplate) {
   const components: MetaComponent[] = [];
   if (template.headerType === "text" && template.headerText) {
-    components.push({ type: "HEADER", format: "TEXT", text: template.headerText });
+    const headerText = toMetaTemplateText(template.headerText, template.variableSamples);
+    components.push({
+      type: "HEADER",
+      format: "TEXT",
+      text: headerText.text,
+      ...(headerText.examples.length ? { example: { header_text: [headerText.examples[0]] } } : {}),
+    });
   } else if (["image", "video", "document"].includes(template.headerType)) {
     components.push({ type: "HEADER", format: template.headerType.toUpperCase() });
   }
 
-  components.push({ type: "BODY", text: template.body });
+  const bodyText = toMetaTemplateText(template.body, template.variableSamples);
+  components.push({
+    type: "BODY",
+    text: bodyText.text,
+    ...(bodyText.examples.length ? { example: { body_text: [bodyText.examples] } } : {}),
+  });
   if (template.footer) components.push({ type: "FOOTER", text: template.footer });
   if (template.buttons.length) {
     components.push({
@@ -138,6 +180,30 @@ function toMetaComponents(template: EnterpriseTemplate) {
   }
 
   return components;
+}
+
+function toMetaTemplateText(value: string, sampleValues: Record<string, string> = {}) {
+  const variables: string[] = [];
+  const text = value.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => {
+    const normalized = key.trim();
+    const existingIndex = variables.indexOf(normalized);
+    const index = existingIndex >= 0 ? existingIndex + 1 : variables.push(normalized);
+    return `{{${index}}}`;
+  });
+  return {
+    text,
+    examples: variables.map((variable) => sampleValues[variable]?.trim() || variableExamples[variable] || `Sample ${variable.replaceAll("_", " ")}`),
+  };
+}
+
+function toSampleMap(variables: string[], components: MetaComponent[]) {
+  const headerExamples = components.find((item) => item.type === "HEADER")?.example?.header_text ?? [];
+  const bodyExamples = components.find((item) => item.type === "BODY")?.example?.body_text?.[0] ?? [];
+  const examples = [...headerExamples, ...bodyExamples];
+  return Object.fromEntries(variables.map((variable, index) => [
+    variable,
+    examples[index] || variableExamples[variable] || `Sample ${variable.replaceAll("_", " ")}`,
+  ]));
 }
 
 async function firstPhoneNumberId() {
@@ -235,6 +301,10 @@ function toBackendButtonType(value: ButtonType) {
 
 function extractVariables(value: string) {
   return Array.from(value.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)).map((match) => match[1]);
+}
+
+function uniqueStrings(values: string[]) {
+  return values.filter((value, index, all) => value && all.indexOf(value) === index);
 }
 
 function emptyInsight(quality: number) {

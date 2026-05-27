@@ -58,7 +58,8 @@ App routes:
 | `/billing` | `src/features/module-pages/enterprise-module-page.tsx` |
 | `/settings` | `components/settings-workspace.tsx` |
 
-`src/features/templates/template-management-page.tsx` is the active `/templates` UI. It uses
+`src/features/templates/template-management-page.tsx` is the active `/templates` UI. It opens on the saved-template
+catalog first; Add template or Edit opens the heavier builder and live preview only when needed. It uses
 `src/features/templates/template-api.ts` to map the premium template builder to the existing backend template APIs.
 
 ## Runtime
@@ -92,11 +93,16 @@ overrides for direct API debugging.
 
 The UI keeps REST as the durable source for filters, unread counts, and paginated conversation/message history. WebSocket
 events update loaded state for incoming messages, status changes, assignment changes, unread changes, and typing. The inbox
-uses optimistic outbound messages and a fixed-row windowed conversation list to keep high-volume queues responsive.
+can start a new WhatsApp chat from the conversation sidebar using registered phone-number accounts, then stores and queues
+the first outbound message through the backend. It also uses optimistic outbound replies and a fixed-row windowed
+conversation list to keep high-volume queues responsive.
 
 Template creation and Meta sync require a WhatsApp phone number registered in Settings plus configured backend Meta
-credentials. Campaigns require an approved template. Inbox realtime requires backend Redis Pub/Sub and WebSocket support;
-campaign queueing requires RabbitMQ.
+credentials. Campaigns require an approved template. The campaign workspace loads approved templates, registered
+WhatsApp accounts, campaign metrics, queue progress, failed counts, and a validated composer for scheduled recipient
+batches. Settings shows tenant details, saved WhatsApp phone-number accounts, backend Meta readiness checks, public
+tunnel webhook callback generation, a live Meta test-run checklist, and user provisioning. Inbox realtime requires
+backend Redis Pub/Sub and WebSocket support; campaign queueing requires RabbitMQ.
 
 The workspace supports responsive navigation, persisted light/dark mode, reduced-motion browser preferences, focus-visible
 keyboard access, `Ctrl K` workspace search focus, `G I` inbox routing, `G D` dashboard routing, and `?` shortcut help.

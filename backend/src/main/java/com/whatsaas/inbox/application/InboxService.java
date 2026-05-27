@@ -11,12 +11,16 @@ import com.whatsaas.inbox.application.dto.ConversationResponse;
 import com.whatsaas.inbox.application.dto.InboxMessageResponse;
 import com.whatsaas.inbox.application.dto.MessagePageResponse;
 import com.whatsaas.inbox.application.dto.SendConversationMessageRequest;
+import com.whatsaas.inbox.application.dto.StartConversationRequest;
+import com.whatsaas.inbox.application.dto.StartConversationResponse;
 import com.whatsaas.inbox.domain.InboxConversation;
 import com.whatsaas.inbox.infrastructure.InboxConversationRepository;
+import com.whatsaas.whatsapp.application.WhatsAppAccountService;
 import com.whatsaas.whatsapp.application.MessageQueuedEvent;
 import com.whatsaas.whatsapp.domain.WhatsAppMessage;
 import com.whatsaas.whatsapp.infrastructure.WhatsAppMessageRepository;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.springframework.context.ApplicationEventPublisher;
@@ -34,15 +38,17 @@ public class InboxService {
     private final InboxConversationRepository conversationRepository;
     private final WhatsAppMessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final WhatsAppAccountService accountService;
     private final InboxRealtimePublisher realtimePublisher;
     private final ApplicationEventPublisher eventPublisher;
 
     public InboxService(InboxConversationRepository conversationRepository, WhatsAppMessageRepository messageRepository,
-                        UserRepository userRepository, InboxRealtimePublisher realtimePublisher,
-                        ApplicationEventPublisher eventPublisher) {
+                        UserRepository userRepository, WhatsAppAccountService accountService,
+                        InboxRealtimePublisher realtimePublisher, ApplicationEventPublisher eventPublisher) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
+        this.accountService = accountService;
         this.realtimePublisher = realtimePublisher;
         this.eventPublisher = eventPublisher;
     }
@@ -75,7 +81,7 @@ public class InboxService {
         InboxConversation conversation = conversation(conversationId);
         Page<WhatsAppMessage> results = messageRepository.findByTenantIdAndConversationIdOrderByCreatedAtDesc(
                 conversation.getTenantId(), conversation.getId(), PageRequest.of(limitPage(page), limitSize(size)));
-        var items = results.map(InboxMessageResponse::from).getContent();
+        var items = new ArrayList<>(results.map(InboxMessageResponse::from).getContent());
         Collections.reverse(items);
         return new MessagePageResponse(items, results.hasNext(), results.getNumber() + 1);
     }
@@ -93,10 +99,38 @@ public class InboxService {
                 request.clientMessageId(), message.getMetaMessageId(), message.getDirection().name(),
                 message.getType().name(), message.getBody(), message.getStatus().name(), message.getMediaMimeType(),
                 message.getMediaPath() == null ? null : "/api/v1/inbox/messages/" + message.getId() + "/media",
-                message.getCreatedAt());
+                message.getSendAttempts(), message.getLastError(), message.getCreatedAt());
         realtimePublisher.publish(new InboxRealtimeEvent(conversation.getTenantId(), InboxEventType.MESSAGE_CREATED,
-                conversation.getId(), conversationResponse, response, userId(), null));
+                conversation.getId(), conversationResponse, response, userId(), null, null));
         return response;
+    }
+
+    @Transactional
+    public StartConversationResponse start(StartConversationRequest request) {
+        Long tenantId = TenantContext.currentTenantId();
+        Long actorId = userId();
+        String phoneNumberId = request.phoneNumberId().trim();
+        String recipient = normalizePhone(request.recipient());
+        String body = request.body().trim();
+
+        accountService.requireOutboundAccount(tenantId, phoneNumberId);
+        InboxConversation conversation = conversationRepository
+                .findByTenantIdAndPhoneNumberIdAndContactPhone(tenantId, phoneNumberId, recipient)
+                .orElseGet(() -> conversationRepository.save(new InboxConversation(tenantId, phoneNumberId, recipient,
+                        body)));
+        conversation.rename(request.contactName());
+
+        WhatsAppMessage message = messageRepository.save(new WhatsAppMessage(tenantId, actorId, phoneNumberId,
+                recipient, body));
+        message.attachConversation(conversation.getId());
+        conversation.send(body);
+
+        eventPublisher.publishEvent(new MessageQueuedEvent(tenantId, message.getId()));
+        ConversationResponse conversationResponse = ConversationResponse.from(conversation);
+        InboxMessageResponse messageResponse = messageResponse(message, conversation.getId(), request.clientMessageId());
+        realtimePublisher.publish(new InboxRealtimeEvent(tenantId, InboxEventType.MESSAGE_CREATED, conversation.getId(),
+                conversationResponse, messageResponse, actorId, null, null));
+        return new StartConversationResponse(conversationResponse, messageResponse);
     }
 
     @Transactional
@@ -107,7 +141,7 @@ public class InboxService {
         conversation.assign(request.agentId());
         ConversationResponse response = ConversationResponse.from(conversation);
         realtimePublisher.publish(new InboxRealtimeEvent(conversation.getTenantId(), InboxEventType.CONVERSATION_CHANGED,
-                conversation.getId(), response, null, userId(), null));
+                conversation.getId(), response, null, userId(), null, null));
         return response;
     }
 
@@ -117,14 +151,41 @@ public class InboxService {
         conversation.markRead();
         ConversationResponse response = ConversationResponse.from(conversation);
         realtimePublisher.publish(new InboxRealtimeEvent(conversation.getTenantId(), InboxEventType.CONVERSATION_CHANGED,
-                conversation.getId(), response, null, userId(), null));
+                conversation.getId(), response, null, userId(), null, null));
         return response;
+    }
+
+    @Transactional
+    public void delete(Long conversationId) {
+        InboxConversation conversation = conversation(conversationId);
+        Long tenantId = conversation.getTenantId();
+        messageRepository.deleteByTenantIdAndConversationId(tenantId, conversation.getId());
+        conversationRepository.delete(conversation);
+        realtimePublisher.publish(new InboxRealtimeEvent(tenantId, InboxEventType.CONVERSATION_DELETED,
+                conversationId, null, null, userId(), null, null));
+    }
+
+    @Transactional
+    public void deleteMessage(Long conversationId, Long messageId) {
+        InboxConversation conversation = conversation(conversationId);
+        WhatsAppMessage message = messageRepository.findByTenantIdAndId(conversation.getTenantId(), messageId)
+                .filter(candidate -> conversation.getId().equals(candidate.getConversationId()))
+                .orElseThrow(() -> new DomainException(HttpStatus.NOT_FOUND, "MESSAGE_NOT_FOUND",
+                        "Message not found."));
+        messageRepository.delete(message);
+        messageRepository.findFirstByTenantIdAndConversationIdOrderByCreatedAtDesc(conversation.getTenantId(),
+                conversation.getId()).ifPresentOrElse(
+                latest -> conversation.restateLastMessage(preview(latest), latest.getCreatedAt()),
+                conversation::clearMessages);
+        ConversationResponse response = ConversationResponse.from(conversation);
+        realtimePublisher.publish(new InboxRealtimeEvent(conversation.getTenantId(), InboxEventType.MESSAGE_DELETED,
+                conversation.getId(), response, null, userId(), null, messageId));
     }
 
     public void typing(Long conversationId, boolean typing) {
         InboxConversation conversation = conversation(conversationId);
         realtimePublisher.publish(new InboxRealtimeEvent(conversation.getTenantId(), InboxEventType.TYPING_CHANGED,
-                conversation.getId(), null, null, userId(), typing));
+                conversation.getId(), null, null, userId(), typing, null));
     }
 
     @Transactional(readOnly = true)
@@ -160,6 +221,27 @@ public class InboxService {
             throw new DomainException(HttpStatus.UNAUTHORIZED, "USER_REQUIRED", "User context is missing.");
         }
         return userId;
+    }
+
+    private InboxMessageResponse messageResponse(WhatsAppMessage message, Long conversationId, String clientMessageId) {
+        return new InboxMessageResponse(message.getId(), conversationId, clientMessageId, message.getMetaMessageId(),
+                message.getDirection().name(), message.getType().name(), message.getBody(), message.getStatus().name(),
+                message.getMediaMimeType(),
+                message.getMediaPath() == null ? null : "/api/v1/inbox/messages/" + message.getId() + "/media",
+                message.getSendAttempts(), message.getLastError(), message.getCreatedAt());
+    }
+
+    private String preview(WhatsAppMessage message) {
+        return message.getBody() == null || message.getBody().isBlank() ? message.getType().name() + " message"
+                : message.getBody();
+    }
+
+    private String normalizePhone(String recipient) {
+        String normalized = recipient.trim().replaceAll("[^0-9]", "");
+        if (normalized.isBlank()) {
+            throw new DomainException(HttpStatus.BAD_REQUEST, "RECIPIENT_REQUIRED", "Recipient phone number is required.");
+        }
+        return normalized;
     }
 
     private int limitPage(int page) {

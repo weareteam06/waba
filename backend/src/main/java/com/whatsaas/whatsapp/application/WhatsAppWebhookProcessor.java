@@ -59,6 +59,8 @@ public class WhatsAppWebhookProcessor {
                     log.warn("Ignoring WhatsApp webhook for unregistered phone number id {}", phoneNumberId);
                     continue;
                 }
+                log.info("Processing WhatsApp webhook for tenant {} phoneNumberId {}", account.getTenantId(),
+                        phoneNumberId);
                 receiveMessages(account, phoneNumberId, value.path("contacts"), value.path("messages"));
                 receiveStatuses(value.path("statuses"));
             }
@@ -90,6 +92,8 @@ public class WhatsAppWebhookProcessor {
                 mediaDownloadService.downloadInboundMedia(message);
             }
             inboxConversationWriter.receive(message, contactName(contacts, message.getRecipient()));
+            log.info("Stored inbound WhatsApp message {} from {} type {} for tenant {}",
+                    metaMessageId, message.getRecipient(), message.getType(), account.getTenantId());
             workflowTriggerService.inbound(message);
         }
     }
@@ -104,6 +108,7 @@ public class WhatsAppWebhookProcessor {
                     .ifPresent(message -> {
                         message.markStatus(status(node.path("status").asText()));
                         inboxConversationWriter.statusChanged(message);
+                        log.info("Updated WhatsApp message {} status to {}", metaMessageId, message.getStatus());
                     });
         }
     }

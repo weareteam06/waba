@@ -5,6 +5,15 @@ import { apiRequest } from "@/lib/api-client";
 export type Tenant = { id: number; slug: string; name: string; status: string };
 export type User = { id: number; displayName: string; email: string; status: string; roles: string[] };
 export type Account = { id: number; phoneNumberId: string; wabaId: string; displayPhoneNumber: string | null };
+export type WhatsAppReadiness = {
+  graphVersion: string;
+  accessTokenConfigured: boolean;
+  appSecretConfigured: boolean;
+  webhookVerifyTokenConfigured: boolean;
+  webhookPath: string;
+  mediaDownloadDirectory: string;
+  maxSendAttempts: number;
+};
 export type Template = {
   id: number;
   wabaId: string;
@@ -47,6 +56,7 @@ export const users = () => apiRequest<User[]>("/api/v1/users");
 export const createUser = (input: { displayName: string; email: string; password: string; roles: string[] }) =>
   apiRequest<User>("/api/v1/users", { method: "POST", body: JSON.stringify(input) });
 export const accounts = () => apiRequest<Account[]>("/api/v1/whatsapp/accounts");
+export const whatsappReadiness = () => apiRequest<WhatsAppReadiness>("/api/v1/whatsapp/accounts/readiness");
 export const registerAccount = (input: { phoneNumberId: string; wabaId: string; displayPhoneNumber: string }) =>
   apiRequest<Account>("/api/v1/whatsapp/accounts", { method: "POST", body: JSON.stringify(input) });
 export const messages = () => apiRequest<Message[]>("/api/v1/messages");

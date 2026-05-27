@@ -12,6 +12,9 @@ export const keys = {
   workflows: ["workflows"] as const,
 };
 
+const visibleInterval = (milliseconds: number) => () =>
+  typeof document === "undefined" || document.visibilityState === "visible" ? milliseconds : false;
+
 export function useTenant() {
   return useQuery({ queryKey: keys.tenant, queryFn: api.tenantMe });
 }
@@ -20,9 +23,9 @@ export function useWorkspaceSummary() {
   return {
     tenant: useTenant(),
     accounts: useQuery({ queryKey: keys.accounts, queryFn: api.accounts }),
-    templates: useQuery({ queryKey: keys.templates(), queryFn: () => api.templates() }),
-    campaigns: useQuery({ queryKey: keys.campaigns, queryFn: api.campaigns }),
-    messages: useQuery({ queryKey: keys.messages, queryFn: api.messages }),
+    templates: useQuery({ queryKey: keys.templates(), queryFn: () => api.templates(), refetchInterval: visibleInterval(30000) }),
+    campaigns: useQuery({ queryKey: keys.campaigns, queryFn: api.campaigns, refetchInterval: visibleInterval(15000) }),
+    messages: useQuery({ queryKey: keys.messages, queryFn: api.messages, refetchInterval: visibleInterval(15000) }),
   };
 }
 

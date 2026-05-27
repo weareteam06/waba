@@ -50,24 +50,23 @@ export function AuthPage() {
 
   return (
     <main className="relative grid min-h-dvh overflow-hidden bg-[var(--canvas)] p-4 lg:grid-cols-[minmax(0,1fr)_520px] lg:p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(56,189,248,.22),transparent_32rem),radial-gradient(circle_at_80%_30%,rgba(167,139,250,.2),transparent_30rem)]" />
-      <section className="relative hidden rounded-3xl border border-white/10 bg-slate-950/55 p-10 backdrop-blur-xl lg:flex lg:flex-col lg:justify-between">
+      <section className="relative hidden rounded-lg border border-[var(--line)] bg-[var(--sidebar)] p-10 lg:flex lg:flex-col lg:justify-between">
         <div>
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-sky-300 to-violet-300 text-slate-950"><MessageSquareText className="h-7 w-7" /></span>
-          <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mt-8 max-w-3xl text-6xl font-semibold leading-tight">Enterprise WhatsApp engagement, built for serious teams.</motion.h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">Inbox, campaigns, templates, automations, AI handoff, analytics, billing, and governance in one tenant-safe command center.</p>
+          <span className="grid h-14 w-14 place-items-center rounded-lg bg-[var(--primary)] text-white"><MessageSquareText className="h-7 w-7" /></span>
+          <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mt-8 max-w-3xl text-6xl font-semibold leading-tight text-[var(--ink)]">Enterprise WhatsApp engagement, built for serious teams.</motion.h1>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--muted)]">Inbox, campaigns, templates, automations, AI handoff, analytics, billing, and governance in one tenant-safe command center.</p>
         </div>
         <div className="grid grid-cols-3 gap-4">
-          {["JWT refresh sessions", "MFA ready UI", "Role-aware routes"].map((item) => <Card key={item} className="p-4"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="mt-3 text-sm text-slate-200">{item}</p></Card>)}
+          {["JWT refresh sessions", "MFA ready UI", "Role-aware routes"].map((item) => <Card key={item} className="p-4"><ShieldCheck className="h-5 w-5 text-[var(--success)]" /><p className="mt-3 text-sm text-[var(--ink)]">{item}</p></Card>)}
         </div>
       </section>
       <section className="relative grid place-items-center">
         <Card className="w-full max-w-md p-6 sm:p-8">
-          <div className="mb-6 flex rounded-2xl bg-white/8 p-1">
-            {(["login", "register", "forgot", "mfa"] as const).map((item) => <button key={item} className={`h-10 flex-1 rounded-xl text-xs font-medium capitalize transition ${mode === item ? "bg-white text-slate-950" : "text-slate-300 hover:text-white"}`} onClick={() => setMode(item)}>{item}</button>)}
+          <div className="mb-6 flex rounded-lg bg-[var(--panel-strong)] p-1">
+            {(["login", "register", "forgot", "mfa"] as const).map((item) => <button key={item} className={`h-10 flex-1 rounded-md text-xs font-medium capitalize transition ${mode === item ? "bg-[var(--primary)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]"}`} onClick={() => setMode(item)}>{item}</button>)}
           </div>
           <div className="flex items-start gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-sky-400/15 text-[var(--accent)]">{mode === "mfa" ? <Fingerprint /> : <KeyRound />}</span>
+            <span className="grid h-11 w-11 place-items-center rounded-lg bg-[var(--primary-soft)] text-[var(--primary)]">{mode === "mfa" ? <Fingerprint /> : <KeyRound />}</span>
             <div><h2 className="text-2xl font-semibold">{mode === "register" ? "Create tenant" : mode === "forgot" ? "Recover access" : mode === "mfa" ? "Verify identity" : "Welcome back"}</h2><p className="mt-1 text-sm text-[var(--muted)]">Secure workspace access for multi-tenant operations.</p></div>
           </div>
           <form className="mt-6 grid gap-4" onSubmit={form.handleSubmit(submit)}>

@@ -9,13 +9,17 @@ import {
   LoaderCircle,
   MessageSquareOff,
   Paperclip,
+  Phone,
+  Plus,
   Search,
   Send,
   SlidersHorizontal,
+  Trash2,
   UserRoundCheck,
+  X,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge, Skeleton, Surface } from "@/components/ui/surface";
 import {
@@ -24,13 +28,17 @@ import {
   loadMediaPreview,
   loadMessages,
   markRead,
+  deleteConversation,
+  deleteMessage,
   publishTyping,
   sendMessage,
+  startConversation,
 } from "@/lib/inbox-api";
-import { connectInboxRealtime } from "@/lib/inbox-realtime";
 import type { Conversation, ConversationFilter, InboxEvent, InboxMessage } from "@/lib/inbox-types";
 import { clock, cn, weekday } from "@/lib/utils";
 import { currentUserId } from "@/lib/api-client";
+import { accounts as loadAccounts, type Account } from "@/lib/workspace-api";
+import { useRealtimeStore } from "@/src/store/realtime-store";
 
 const filters: ConversationFilter[] = ["ALL", "UNREAD", "ASSIGNED_TO_ME", "UNASSIGNED"];
 
@@ -48,24 +56,43 @@ export function InboxWorkspace() {
   const [draft, setDraft] = useState("");
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [startOpen, setStartOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<Set<number>>(() => new Set());
+  const [deletingConversations, setDeletingConversations] = useState(false);
+  const [messageSelectMode, setMessageSelectMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<number>>(() => new Set());
+  const [deletingMessages, setDeletingMessages] = useState(false);
+  const realtimeStatus = useRealtimeStore((state) => state.status);
+  const lastInboxEvent = useRealtimeStore((state) => state.lastInboxEvent);
   const [typingActors, setTypingActors] = useState<Record<number, number[]>>({});
   const [error, setError] = useState<string | null>(null);
   const listSentinel = useRef<HTMLDivElement>(null);
   const messageSentinel = useRef<HTMLDivElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedIdRef = useRef<number | null>(null);
 
   const selected = useMemo(
     () => conversations.find((item) => item.id === selectedId) ?? null,
     [conversations, selectedId],
   );
 
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
   const loadConversationPage = useCallback(async () => {
     if (loadingConversations) return;
     setLoadingConversations(true);
     try {
       const page = await loadConversations(filter, query, conversationPage);
-      setConversations((items) => mergeConversations(items, page.items));
-      setSelectedId((id) => id ?? page.items[0]?.id ?? null);
+      setConversations((items) => conversationPage === 0 ? page.items : mergeConversations(items, page.items));
+      setSelectedId((id) => {
+        if (conversationPage === 0) return page.items[0]?.id ?? null;
+        return id ?? page.items[0]?.id ?? null;
+      });
       setConversationPage(page.nextPage);
       setConversationHasMore(page.hasMore);
     } catch {
@@ -81,6 +108,10 @@ export function InboxWorkspace() {
   }, [conversationHasMore, conversationPage, loadConversationPage, loadingConversations]);
 
   useEffect(() => {
+    void loadAccounts().then(setAccounts).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (!conversationHasMore || loadingConversations || conversations.length === 0) return;
     const observer = observe(listSentinel.current, () => void loadConversationPage());
     return () => observer?.disconnect();
@@ -88,9 +119,13 @@ export function InboxWorkspace() {
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      setMessages([]);
+      setMessages((items) => items.length > 0 && items.every((message) => message.conversationId === selectedId)
+        ? items
+        : []);
       setMessagePage(0);
       setMessageHasMore(Boolean(selectedId));
+      setMessageSelectMode(false);
+      setSelectedMessageIds(new Set());
       if (selectedId) void markRead(selectedId).then(updateConversation).catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timeout);
@@ -106,28 +141,48 @@ export function InboxWorkspace() {
           setMessagePage(page.nextPage);
           setMessageHasMore(page.hasMore);
         })
-        .catch(() => setError("Message history could not load."))
+        .catch(() => {
+          setMessageHasMore(false);
+          setError("Message history could not load.");
+        })
         .finally(() => setLoadingMessages(false));
     });
     return () => observer?.disconnect();
   }, [loadingMessages, messageHasMore, messagePage, selectedId]);
 
-  useEffect(() => connectInboxRealtime((event: InboxEvent) => {
+  useEffect(() => {
+    if (!lastInboxEvent) return;
+    const event: InboxEvent = lastInboxEvent;
+    if (event.type === "CONVERSATION_DELETED") {
+      setConversations((items) => items.filter((item) => item.id !== event.conversationId));
+      setSelectedConversationIds((ids) => removeId(ids, event.conversationId));
+      if (selectedIdRef.current === event.conversationId) {
+        setSelectedId(null);
+        setMessages([]);
+      }
+      return;
+    }
     if (event.conversation) {
       setConversations((items) => mergeConversations(items.filter((item) => item.id !== event.conversation?.id), [event.conversation as Conversation]));
     }
+    if (event.type === "MESSAGE_DELETED" && event.deletedMessageId) {
+      setMessages((items) => event.conversationId === selectedIdRef.current
+        ? items.filter((message) => message.id !== event.deletedMessageId)
+        : items);
+      setSelectedMessageIds((ids) => removeId(ids, event.deletedMessageId as number));
+    }
     if (event.message) {
-      setMessages((items) => event.conversationId === selectedId ? reconcileMessage(items, event.message as InboxMessage) : items);
+      setMessages((items) => event.conversationId === selectedIdRef.current ? reconcileMessage(items, event.message as InboxMessage) : items);
     }
     if (event.type === "TYPING_CHANGED" && event.actorId && event.actorId !== configuredAgentId) {
       setTypingActors((actors) => ({
         ...actors,
         [event.conversationId]: event.typing
           ? unique([...(actors[event.conversationId] ?? []), event.actorId as number])
-          : (actors[event.conversationId] ?? []).filter((id) => id !== event.actorId),
+        : (actors[event.conversationId] ?? []).filter((id) => id !== event.actorId),
       }));
     }
-  }), [configuredAgentId, selectedId]);
+  }, [configuredAgentId, lastInboxEvent]);
 
   function updateConversation(conversation: Conversation) {
     setConversations((items) => mergeConversations(items.filter((item) => item.id !== conversation.id), [conversation]));
@@ -148,6 +203,78 @@ export function InboxWorkspace() {
     setConversationPage(0);
     setConversationHasMore(true);
     setSelectedId(null);
+    setMessages([]);
+    setMessageHasMore(false);
+  }
+
+  function toggleSelectMode() {
+    setSelectMode((value) => {
+      if (value) setSelectedConversationIds(new Set());
+      return !value;
+    });
+  }
+
+  function toggleConversationSelection(id: number) {
+    setSelectedConversationIds((ids) => {
+      const next = new Set(ids);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleMessageSelectMode() {
+    setMessageSelectMode((value) => {
+      if (value) setSelectedMessageIds(new Set());
+      return !value;
+    });
+  }
+
+  function toggleMessageSelection(id: number) {
+    setSelectedMessageIds((ids) => {
+      const next = new Set(ids);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function deleteSelectedConversations() {
+    const ids = [...selectedConversationIds];
+    if (ids.length === 0 || deletingConversations) return;
+    setDeletingConversations(true);
+    setError(null);
+    try {
+      await Promise.all(ids.map((id) => deleteConversation(id)));
+      setConversations((items) => items.filter((item) => !selectedConversationIds.has(item.id)));
+      if (selectedId && selectedConversationIds.has(selectedId)) {
+        setSelectedId(null);
+        setMessages([]);
+      }
+      setSelectedConversationIds(new Set());
+      setSelectMode(false);
+    } catch {
+      setError("Selected conversations could not be deleted.");
+    } finally {
+      setDeletingConversations(false);
+    }
+  }
+
+  async function deleteSelectedMessages() {
+    if (!selectedId || selectedMessageIds.size === 0 || deletingMessages) return;
+    const ids = [...selectedMessageIds];
+    setDeletingMessages(true);
+    setError(null);
+    try {
+      await Promise.all(ids.map((id) => deleteMessage(selectedId, id)));
+      setMessages((items) => items.filter((item) => typeof item.id !== "number" || !selectedMessageIds.has(item.id)));
+      setSelectedMessageIds(new Set());
+      setMessageSelectMode(false);
+    } catch {
+      setError("Selected messages could not be deleted.");
+    } finally {
+      setDeletingMessages(false);
+    }
   }
 
   async function submit() {
@@ -165,6 +292,8 @@ export function InboxWorkspace() {
       status: "QUEUED",
       mediaMimeType: null,
       mediaUrl: null,
+      sendAttempts: 0,
+      lastError: null,
       createdAt: new Date().toISOString(),
       optimistic: true,
     };
@@ -175,7 +304,25 @@ export function InboxWorkspace() {
       setMessages((items) => reconcileMessage(items, saved));
       await publishTyping(selected.id, false);
     } catch {
-      setMessages((items) => items.map((item) => item.id === optimistic.id ? { ...item, status: "FAILED" } : item));
+      setMessages((items) => items.map((item) => item.id === optimistic.id ? { ...item, status: "FAILED", lastError: "Message could not be queued by the backend." } : item));
+    }
+  }
+
+  async function startNewConversation(input: StartChatInput) {
+    const clientMessageId = crypto.randomUUID();
+
+    setStarting(true);
+    setError(null);
+    try {
+      const result = await startConversation({ ...input, clientMessageId });
+      setConversations((items) => mergeConversations(items.filter((item) => item.id !== result.conversation.id), [result.conversation]));
+      setSelectedId(result.conversation.id);
+      setMessages([result.message]);
+      setStartOpen(false);
+    } catch {
+      setError("Could not start chat. Check the WhatsApp account, recipient number, and Meta credentials.");
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -208,8 +355,34 @@ export function InboxWorkspace() {
               <h1 className="text-xl font-semibold">Inbox</h1>
               <p className="text-sm text-[var(--muted)]">Realtime conversations</p>
             </div>
-            <Badge>{conversations.reduce((total, item) => total + item.unreadCount, 0)} unread</Badge>
+            <div className="flex items-center gap-2">
+              <Badge>{conversations.reduce((total, item) => total + item.unreadCount, 0)} unread</Badge>
+              <Badge className={cn(realtimeStatus === "live" ? "text-[var(--success)]" : realtimeStatus === "connecting" ? "text-[var(--warning)]" : "text-[var(--danger)]")}>
+                {realtimeStatus}
+              </Badge>
+              <Button aria-label={selectMode ? "Cancel selection" : "Select chats"} title={selectMode ? "Cancel selection" : "Select chats"} className="h-9 w-9 px-0" onClick={toggleSelectMode}>
+                <CheckBoxIcon checked={selectMode} />
+              </Button>
+              <Button aria-label="Start new chat" title="Start new chat" variant="primary" className="h-9 w-9 px-0" onClick={() => setStartOpen(true)}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
+          {selectMode && (
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-[var(--line)] bg-[var(--panel-strong)] p-2">
+              <span className="text-xs text-[var(--muted)]">{selectedConversationIds.size} selected</span>
+              <Button
+                aria-label="Delete selected chats"
+                title="Delete selected chats"
+                className="h-8 px-2 text-[var(--danger)]"
+                disabled={selectedConversationIds.size === 0 || deletingConversations}
+                onClick={() => void deleteSelectedConversations()}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+          )}
           <label className="mt-4 flex h-11 items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel-strong)] px-3">
             <Search className="h-4 w-4 shrink-0 text-[var(--muted)]" />
             <input aria-label="Search conversations" className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Name or phone number" value={query} onChange={(event) => changeQuery(event.target.value)} />
@@ -225,11 +398,37 @@ export function InboxWorkspace() {
           ))}
         </nav>
         {loadingConversations && conversations.length === 0 ? <ConversationSkeletons /> : (
-          <VirtualConversationList conversations={conversations} selectedId={selectedId} onSelect={setSelectedId} sentinel={listSentinel} loading={loadingConversations} />
+          <VirtualConversationList
+            conversations={conversations}
+            selectedId={selectedId}
+            selectedConversationIds={selectedConversationIds}
+            selectMode={selectMode}
+            onSelect={setSelectedId}
+            onToggleSelection={toggleConversationSelection}
+            sentinel={listSentinel}
+            loading={loadingConversations}
+          />
         )}
       </aside>
+      {startOpen && (
+        <StartConversationDialog
+          accounts={accounts}
+          busy={starting}
+          onClose={() => setStartOpen(false)}
+          onSubmit={(input) => void startNewConversation(input)}
+        />
+      )}
       <section className={cn("grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]", !selected && "hidden lg:grid")}>
-        <ChatHeader conversation={selected} onClaim={claimConversation} onBack={() => setSelectedId(null)} />
+        <ChatHeader
+          conversation={selected}
+          messageSelectMode={messageSelectMode}
+          selectedMessageCount={selectedMessageIds.size}
+          deletingMessages={deletingMessages}
+          onClaim={claimConversation}
+          onBack={() => setSelectedId(null)}
+          onToggleMessageSelectMode={toggleMessageSelectMode}
+          onDeleteMessages={() => void deleteSelectedMessages()}
+        />
         <div className="chat-grid scrollbar-thin min-h-0 overflow-y-auto px-3 py-4 sm:px-7">
           <div ref={messageSentinel} className="grid h-9 place-items-center text-[var(--muted)]">
             {loadingMessages && <ArrowDown className="h-4 w-4 animate-bounce" />}
@@ -238,7 +437,15 @@ export function InboxWorkspace() {
             <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
               {messages.length === 0 && loadingMessages && <MessageSkeletons />}
               {messages.length === 0 && !loadingMessages && <NoMessages />}
-              {messages.map((message) => <MessageBubble key={message.id} message={message} />)}
+              {messages.map((message) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  selectMode={messageSelectMode}
+                  checked={typeof message.id === "number" && selectedMessageIds.has(message.id)}
+                  onToggleSelection={toggleMessageSelection}
+                />
+              ))}
               {(typingActors[selected.id]?.length ?? 0) > 0 && <TypingBubble />}
             </div>
           )}
@@ -262,17 +469,137 @@ export function InboxWorkspace() {
   );
 }
 
+type StartChatInput = {
+  phoneNumberId: string;
+  recipient: string;
+  contactName?: string;
+  body: string;
+};
+
+function StartConversationDialog({
+  accounts,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  accounts: Account[];
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (input: StartChatInput) => void;
+}) {
+  const [phoneNumberId, setPhoneNumberId] = useState(accounts[0]?.phoneNumberId ?? "");
+  const [recipient, setRecipient] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [body, setBody] = useState("");
+
+  useEffect(() => {
+    if (!phoneNumberId && accounts[0]?.phoneNumberId) setPhoneNumberId(accounts[0].phoneNumberId);
+  }, [accounts, phoneNumberId]);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!phoneNumberId || !recipient.trim() || !body.trim()) return;
+    onSubmit({
+      phoneNumberId,
+      recipient: recipient.trim(),
+      contactName: contactName.trim() || undefined,
+      body: body.trim(),
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
+      <form onSubmit={submit} className="w-full max-w-lg rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Start WhatsApp chat</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">Send a first outbound message using a registered Meta phone number.</p>
+          </div>
+          <Button aria-label="Close" variant="ghost" className="h-9 w-9 px-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="mt-5 grid gap-4">
+          <label className="grid gap-2 text-sm font-medium">
+            WhatsApp account
+            <select
+              value={phoneNumberId}
+              onChange={(event) => setPhoneNumberId(event.target.value)}
+              className="h-11 rounded-md border border-[var(--line)] bg-[var(--panel-strong)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+            >
+              {accounts.length === 0 && <option value="">No registered account found</option>}
+              {accounts.map((account) => (
+                <option key={account.id} value={account.phoneNumberId}>
+                  {account.displayPhoneNumber ?? account.phoneNumberId}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-2 text-sm font-medium">
+            Recipient phone number
+            <span className="flex h-11 items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel-strong)] px-3">
+              <Phone className="h-4 w-4 text-[var(--muted)]" />
+              <input
+                value={recipient}
+                onChange={(event) => setRecipient(event.target.value)}
+                placeholder="+919876543210"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+              />
+            </span>
+          </label>
+
+          <label className="grid gap-2 text-sm font-medium">
+            Contact name
+            <input
+              value={contactName}
+              onChange={(event) => setContactName(event.target.value)}
+              placeholder="Optional"
+              className="h-11 rounded-md border border-[var(--line)] bg-[var(--panel-strong)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+
+          <label className="grid gap-2 text-sm font-medium">
+            Message
+            <textarea
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              placeholder="Write the first message"
+              className="min-h-28 resize-y rounded-md border border-[var(--line)] bg-[var(--panel-strong)] px-3 py-3 text-sm outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={busy || !phoneNumberId || !recipient.trim() || !body.trim()}>
+            {busy && <LoaderCircle className="h-4 w-4 animate-spin" />}
+            Send message
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function VirtualConversationList({
   conversations,
   selectedId,
+  selectedConversationIds,
+  selectMode,
   onSelect,
+  onToggleSelection,
   sentinel,
   loading,
 }: {
   conversations: Conversation[];
   selectedId: number | null;
+  selectedConversationIds: Set<number>;
+  selectMode: boolean;
   onSelect: (id: number) => void;
-  sentinel: React.RefObject<HTMLDivElement | null>;
+  onToggleSelection: (id: number) => void;
+  sentinel: RefObject<HTMLDivElement | null>;
   loading: boolean;
 }) {
   const rowHeight = 84;
@@ -298,7 +625,15 @@ function VirtualConversationList({
         <div style={{ height: `${conversations.length * rowHeight + 64}px` }} className="relative">
           <div className="absolute inset-x-0" style={{ transform: `translateY(${start * rowHeight}px)` }}>
             {conversations.slice(start, end).map((conversation) => (
-              <ConversationRow key={conversation.id} conversation={conversation} selected={selectedId === conversation.id} onSelect={onSelect} />
+              <ConversationRow
+                key={conversation.id}
+                conversation={conversation}
+                selected={selectedId === conversation.id}
+                checked={selectedConversationIds.has(conversation.id)}
+                selectMode={selectMode}
+                onSelect={onSelect}
+                onToggleSelection={onToggleSelection}
+              />
             ))}
           </div>
           <div ref={sentinel} className="absolute inset-x-0 bottom-0 grid h-14 place-items-center text-[var(--muted)]">
@@ -310,12 +645,26 @@ function VirtualConversationList({
   );
 }
 
-function ConversationRow({ conversation, selected, onSelect }: { conversation: Conversation; selected: boolean; onSelect: (id: number) => void }) {
+function ConversationRow({
+  conversation,
+  selected,
+  checked,
+  selectMode,
+  onSelect,
+  onToggleSelection,
+}: {
+  conversation: Conversation;
+  selected: boolean;
+  checked: boolean;
+  selectMode: boolean;
+  onSelect: (id: number) => void;
+  onToggleSelection: (id: number) => void;
+}) {
   return (
-    <button onClick={() => onSelect(conversation.id)}
+    <button onClick={() => selectMode ? onToggleSelection(conversation.id) : onSelect(conversation.id)}
       className={cn("grid h-[84px] w-full grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--line)] px-4 text-left transition", selected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--panel-strong)]")}>
-      <span aria-hidden className="grid h-10 w-10 place-items-center rounded-md bg-[var(--panel-strong)] text-sm font-semibold text-[var(--accent-strong)]">
-        {(conversation.contactName ?? conversation.contactPhone).slice(0, 2).toUpperCase()}
+      <span aria-hidden className={cn("grid h-10 w-10 place-items-center rounded-md bg-[var(--panel-strong)] text-sm font-semibold text-[var(--accent-strong)]", checked && "bg-[var(--accent)] text-white")}>
+        {selectMode ? <CheckBoxIcon checked={checked} /> : (conversation.contactName ?? conversation.contactPhone).slice(0, 2).toUpperCase()}
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold">{conversation.contactName ?? conversation.contactPhone}</span>
@@ -329,7 +678,33 @@ function ConversationRow({ conversation, selected, onSelect }: { conversation: C
   );
 }
 
-function ChatHeader({ conversation, onClaim, onBack }: { conversation: Conversation | null; onClaim: () => void; onBack: () => void }) {
+function CheckBoxIcon({ checked }: { checked: boolean }) {
+  return (
+    <span className={cn("grid h-4 w-4 place-items-center rounded border", checked ? "border-[var(--accent)] bg-[var(--accent)]" : "border-current")}>
+      {checked && <span className="h-1.5 w-2.5 rotate-[-45deg] border-b-2 border-l-2 border-white" />}
+    </span>
+  );
+}
+
+function ChatHeader({
+  conversation,
+  messageSelectMode,
+  selectedMessageCount,
+  deletingMessages,
+  onClaim,
+  onBack,
+  onToggleMessageSelectMode,
+  onDeleteMessages,
+}: {
+  conversation: Conversation | null;
+  messageSelectMode: boolean;
+  selectedMessageCount: number;
+  deletingMessages: boolean;
+  onClaim: () => void;
+  onBack: () => void;
+  onToggleMessageSelectMode: () => void;
+  onDeleteMessages: () => void;
+}) {
   return (
     <header className="flex min-h-20 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--panel)] px-3 sm:px-7">
       <div className="flex min-w-0 items-center gap-2">
@@ -339,7 +714,32 @@ function ChatHeader({ conversation, onClaim, onBack }: { conversation: Conversat
           {conversation && <p className="truncate text-sm text-[var(--muted)]">{conversation.contactPhone} via {conversation.phoneNumberId}</p>}
         </div>
       </div>
-      {conversation && <Button onClick={onClaim}><UserRoundCheck className="h-4 w-4" />{conversation.assignedAgentId ? `Agent ${conversation.assignedAgentId}` : "Claim"}</Button>}
+      {conversation && (
+        <div className="flex shrink-0 items-center gap-2">
+          {messageSelectMode && <span className="hidden text-xs text-[var(--muted)] sm:inline">{selectedMessageCount} selected</span>}
+          <Button
+            aria-label={messageSelectMode ? "Cancel message selection" : "Select messages"}
+            title={messageSelectMode ? "Cancel message selection" : "Select messages"}
+            className="h-10 w-10 px-0"
+            onClick={onToggleMessageSelectMode}
+          >
+            <CheckBoxIcon checked={messageSelectMode} />
+          </Button>
+          {messageSelectMode && (
+            <Button
+              aria-label="Delete selected messages"
+              title="Delete selected messages"
+              className="h-10 px-2 text-[var(--danger)]"
+              disabled={selectedMessageCount === 0 || deletingMessages}
+              onClick={onDeleteMessages}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Delete</span>
+            </Button>
+          )}
+          <Button onClick={onClaim}><UserRoundCheck className="h-4 w-4" />{conversation.assignedAgentId ? `Agent ${conversation.assignedAgentId}` : "Claim"}</Button>
+        </div>
+      )}
     </header>
   );
 }
@@ -368,10 +768,43 @@ function RailFact({ label, value }: { label: string; value: string }) {
   return <div className="rounded-md border border-[var(--line)] bg-[var(--panel-strong)] p-3"><span className="block text-xs text-[var(--muted)]">{label}</span><b className="mt-1 block truncate text-sm">{value}</b></div>;
 }
 
-function MessageBubble({ message }: { message: InboxMessage }) {
+function MessageBubble({
+  message,
+  selectMode,
+  checked,
+  onToggleSelection,
+}: {
+  message: InboxMessage;
+  selectMode: boolean;
+  checked: boolean;
+  onToggleSelection: (id: number) => void;
+}) {
   const outbound = message.direction === "OUTBOUND";
+  const messageId = typeof message.id === "number" ? message.id : null;
+  const selectable = messageId !== null;
   return (
-    <article className={cn("enter max-w-[min(84%,640px)] rounded-lg border px-3 py-2 shadow-sm", outbound ? "ml-auto border-emerald-500/25 bg-[var(--accent-soft)]" : "border-[var(--line)] bg-[var(--panel)]")}>
+    <article
+      role={selectMode && selectable ? "button" : undefined}
+      aria-pressed={selectMode && selectable ? checked : undefined}
+      tabIndex={selectMode && selectable ? 0 : undefined}
+      onClick={() => selectMode && messageId !== null && onToggleSelection(messageId)}
+      onKeyDown={(event) => {
+        if (!selectMode || messageId === null || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        onToggleSelection(messageId);
+      }}
+      className={cn(
+        "enter relative max-w-[min(84%,640px)] rounded-lg border px-3 py-2 shadow-sm",
+        outbound ? "ml-auto border-emerald-500/25 bg-[var(--accent-soft)]" : "border-[var(--line)] bg-[var(--panel)]",
+        selectMode && selectable && "cursor-pointer ring-offset-2 ring-offset-[var(--chat)]",
+        checked && "ring-2 ring-[var(--accent)]",
+      )}
+    >
+      {selectMode && selectable && (
+        <span className="absolute -left-2 -top-2 grid h-6 w-6 place-items-center rounded-md border border-[var(--line)] bg-[var(--panel)] shadow-sm">
+          <CheckBoxIcon checked={checked} />
+        </span>
+      )}
       {message.type !== "TEXT" && <MediaPreview message={message} />}
       {message.body && <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.body}</p>}
       <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[var(--muted)]">
@@ -380,6 +813,11 @@ function MessageBubble({ message }: { message: InboxMessage }) {
         {message.optimistic && <span>sending</span>}
         {message.status === "FAILED" && <span className="text-[var(--danger)]">failed</span>}
       </div>
+      {message.status === "FAILED" && message.lastError && (
+        <p role="alert" className="mt-1 max-h-12 overflow-hidden text-[11px] leading-4 text-[var(--danger)]" title={message.lastError}>
+          {message.lastError}
+        </p>
+      )}
     </article>
   );
 }
@@ -463,4 +901,10 @@ function observe(target: Element | null, onVisible: () => void) {
 
 function unique(values: number[]) {
   return [...new Set(values)];
+}
+
+function removeId(values: Set<number>, id: number) {
+  const next = new Set(values);
+  next.delete(id);
+  return next;
 }
